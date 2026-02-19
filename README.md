@@ -38,18 +38,32 @@ There is **no managed/shared auth service** in this repo right now.
 
 If you want agents/users to run it immediately without cloning:
 
-(Using GitHub package source for now. Scoped npm publish can be added later.)
+### Current (works now via GitHub source)
 
-### Run once (ephemeral)
+Run once (ephemeral):
 
 ```bash
 npm exec --yes --package=github:andreasnlarsen/whoop-cli -- whoop summary --json --pretty
 ```
 
-### Install globally from GitHub
+Install globally:
 
 ```bash
 npm install -g github:andreasnlarsen/whoop-cli
+```
+
+### After npm publish (recommended)
+
+Run once (ephemeral):
+
+```bash
+npx -y @andreasnlarsen/whoop-cli summary --json --pretty
+```
+
+Install globally:
+
+```bash
+npm install -g @andreasnlarsen/whoop-cli
 ```
 
 Then use:
@@ -271,6 +285,15 @@ Exit codes:
 - CLI avoids printing secrets by default
 
 ---
+
+## Maintainer release (npm)
+
+```bash
+npm login
+./scripts/publish-npm.sh
+```
+
+This script runs typecheck/test/build, validates auth, checks version collision, performs dry-run, publishes, and verifies `npx` works.
 
 ## Sources
 
