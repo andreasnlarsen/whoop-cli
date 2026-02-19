@@ -108,14 +108,20 @@ export class WhoopApiClient {
     let pages = 0;
     const pageLimit = opts.all ? opts.maxPages ?? 200 : 1;
 
+    const normalizeDateBoundary = (value: string | undefined, kind: 'start' | 'end'): string | undefined => {
+      if (!value) return undefined;
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return value;
+      return kind === 'start' ? `${value}T00:00:00.000Z` : `${value}T23:59:59.999Z`;
+    };
+
     do {
       const response = await this.requestJson<{ records?: T[]; next_token?: string }>({
         path,
         timeoutMs: opts.timeoutMs,
         query: {
           limit: opts.limit,
-          start: opts.start,
-          end: opts.end,
+          start: normalizeDateBoundary(opts.start, 'start'),
+          end: normalizeDateBoundary(opts.end, 'end'),
           nextToken,
         },
       });
