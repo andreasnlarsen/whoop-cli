@@ -1,17 +1,58 @@
 ---
 name: whoop-cli
 description: Use whoop-cli to fetch WHOOP data, generate day briefs/health flags, and export trend data for automation workflows.
+metadata:
+  openclaw:
+    requires:
+      bins:
+        - whoop
+      env:
+        - WHOOP_CLIENT_ID
+        - WHOOP_CLIENT_SECRET
+        - WHOOP_REDIRECT_URI
+    primaryEnv: WHOOP_CLIENT_SECRET
+    homepage: https://github.com/andreasnlarsen/whoop-cli
+    install:
+      - kind: node
+        package: "@andreasnlarsen/whoop-cli"
+        bins:
+          - whoop
+        label: Install whoop-cli from npm
 ---
 
 # whoop-cli
 
 Use the installed `whoop` command.
 
+## Security + credential handling (required)
+
+- Never ask users to paste client secrets/tokens into chat.
+- For first-time auth, the user should run login **locally on their own shell**.
+- Prefer read-only operational commands in agent flows (`summary`, `day-brief`, `health`, `trend`, `sync pull`).
+- Do not run `whoop auth login` unless the user explicitly asks for login help.
+- Tokens are stored locally at `~/.whoop-cli/profiles/<profile>.json` by the CLI.
+
+## Install / bootstrap
+
+If `whoop` is missing:
+
+```bash
+npm install -g @andreasnlarsen/whoop-cli
+```
+
+Optional OpenClaw skill install from package bundle:
+
+```bash
+whoop openclaw install-skill --force
+```
+
 ## Core checks
 
 1. `whoop auth status --json`
-2. If unauthenticated: `whoop auth login --client-id ... --client-secret ... --redirect-uri ...`
-3. Validate: `whoop day-brief --json --pretty`
+2. If unauthenticated, ask the user to run local login:
+   - `whoop auth login --client-id ... --client-secret ... --redirect-uri ...`
+3. Validate:
+   - `whoop day-brief --json --pretty`
 
 ## Useful commands
 
