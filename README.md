@@ -38,21 +38,7 @@ There is **no managed/shared auth service** in this repo right now.
 
 If you want agents/users to run it immediately without cloning:
 
-### Current (works now via GitHub source)
-
-Run once (ephemeral):
-
-```bash
-npm exec --yes --package=github:andreasnlarsen/whoop-cli -- whoop summary --json --pretty
-```
-
-Install globally:
-
-```bash
-npm install -g github:andreasnlarsen/whoop-cli
-```
-
-### After npm publish (recommended)
+### Recommended (npm registry)
 
 Run once (ephemeral):
 
@@ -64,6 +50,15 @@ Install globally:
 
 ```bash
 npm install -g @andreasnlarsen/whoop-cli
+```
+
+### Fallback (GitHub source)
+
+If npm registry is unavailable for any reason:
+
+```bash
+npm exec --yes --package=github:andreasnlarsen/whoop-cli -- whoop summary --json --pretty
+npm install -g github:andreasnlarsen/whoop-cli
 ```
 
 Then use:
@@ -304,17 +299,33 @@ One-time setup on npmjs.com (**required**):
 3. Optional hardening (recommended): package Settings → Publishing access →
    - "Require two-factor authentication and disallow tokens"
 
-Release flow:
+Release flow (branch-protected safe):
 
 ```bash
-# bump version first (example)
-npm version patch
+# 1) prepare release commit on a branch
+git switch main
+git pull --ff-only
 
-git push origin main --follow-tags
-# OR manually tag: git tag v0.1.1 && git push origin v0.1.1
+git switch -c release/vX.Y.Z
+npm version X.Y.Z --no-git-tag-version
+npm install --package-lock-only
+npm run typecheck && npm test && npm run build
+
+git add package.json package-lock.json
+git commit -m "chore(release): vX.Y.Z"
+git push -u origin release/vX.Y.Z
+
+# 2) open PR: release/vX.Y.Z -> main, then merge
+
+# 3) tag from merged main commit
+git switch main
+git fetch origin
+git reset --hard origin/main
+git tag vX.Y.Z
+git push origin vX.Y.Z
 ```
 
-The GitHub workflow will publish automatically on `v*` tags via OIDC.
+The GitHub workflow publishes automatically on `v*` tags via OIDC trusted publishing.
 
 ### Bootstrap note (first publish)
 
