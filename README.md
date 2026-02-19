@@ -184,6 +184,14 @@ Copy the **full redirected URL** from the browser address bar and paste it into 
 
 (If localhost page fails to load, that is usually fine—just copy the URL.)
 
+If browser auto-open does not work on your machine, run login with:
+
+```bash
+whoop auth login --no-open
+```
+
+Then open the printed URL manually in your browser.
+
 ---
 
 ## For non-technical users
