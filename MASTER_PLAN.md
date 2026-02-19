@@ -163,6 +163,13 @@ Priority legend:
 
 ## G) Reliability & operations
 
+### JTBD-16 (P1)
+**Migrate legacy v1 activity references to v2 UUIDs without manual lookup.**
+- CLI needs: v1->v2 activity mapping lookup endpoint support
+- Command target: `whoop activity map-v1-id --id <v1Id>`
+- OpenClaw help: bulk migration checks for old datasets/scripts
+
+
 ### JTBD-14 (P0)
 **Keep auth alive without babysitting token expiry.**
 - CLI needs: robust refresh + lock + clear status

@@ -78,6 +78,7 @@ You can also set env vars:
 
 - `whoop sync pull --start YYYY-MM-DD --end YYYY-MM-DD --out ./whoop.jsonl`
 - `whoop webhook verify --secret ... --timestamp ... --signature ... --body-file ...`
+- `whoop activity map-v1-id --id <legacyV1ActivityId>`
 
 ### Behavior + experiments
 

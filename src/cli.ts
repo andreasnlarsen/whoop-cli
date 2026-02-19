@@ -11,6 +11,7 @@ import { registerSyncCommands } from './commands/sync.js';
 import { registerWebhookCommands } from './commands/webhook.js';
 import { registerBehaviorCommands } from './commands/behavior.js';
 import { registerExperimentCommands } from './commands/experiment.js';
+import { registerActivityCommands } from './commands/activity.js';
 
 export const program = new Command()
   .name('whoop')
@@ -33,3 +34,4 @@ registerSyncCommands(program);
 registerWebhookCommands(program);
 registerBehaviorCommands(program);
 registerExperimentCommands(program);
+registerActivityCommands(program);
