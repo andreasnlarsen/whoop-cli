@@ -288,12 +288,45 @@ Exit codes:
 
 ## Maintainer release (npm)
 
+### Option A: Trusted publisher (recommended)
+
+This repo includes: `.github/workflows/npm-publish.yml`.
+
+One-time setup on npmjs.com (**required**):
+
+1. Go to package settings for `@andreasnlarsen/whoop-cli`
+2. Add trusted publisher:
+   - Provider: GitHub Actions
+   - Organization/User: `andreasnlarsen`
+   - Repository: `whoop-cli`
+   - Workflow filename: `npm-publish.yml`
+   - Environment name: leave empty (or set if you enforce GitHub Environment)
+3. Optional hardening (recommended): package Settings → Publishing access →
+   - "Require two-factor authentication and disallow tokens"
+
+Release flow:
+
+```bash
+# bump version first (example)
+npm version patch
+
+git push origin main --follow-tags
+# OR manually tag: git tag v0.1.1 && git push origin v0.1.1
+```
+
+The GitHub workflow will publish automatically on `v*` tags via OIDC.
+
+### Bootstrap note (first publish)
+
+npm currently requires the package to exist before trusted publisher can be configured in package settings.
+If this is your very first publish for this package, do one manual publish first:
+
 ```bash
 npm login
 ./scripts/publish-npm.sh
 ```
 
-This script runs typecheck/test/build, validates auth, checks version collision, performs dry-run, publishes, and verifies `npx` works.
+Then enable trusted publisher and use tag-based releases going forward.
 
 ## Sources
 
