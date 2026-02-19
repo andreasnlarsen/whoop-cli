@@ -34,6 +34,42 @@ There is **no managed/shared auth service** in this repo right now.
 
 ---
 
+## One-line options (no clone)
+
+If you want agents/users to run it immediately without cloning:
+
+(Using GitHub package source for now. Scoped npm publish can be added later.)
+
+### Run once (ephemeral)
+
+```bash
+npm exec --yes --package=github:andreasnlarsen/whoop-cli -- whoop summary --json --pretty
+```
+
+### Install globally from GitHub
+
+```bash
+npm install -g github:andreasnlarsen/whoop-cli
+```
+
+Then use:
+
+```bash
+whoop --help
+```
+
+### OpenClaw skill install (optional)
+
+After global install, copy bundled skill into OpenClaw workspace:
+
+```bash
+whoop openclaw install-skill --force
+```
+
+(Default target: `~/.openclaw/workspace/skills/whoop-cli/SKILL.md`)
+
+---
+
 ## Quick start
 
 ## 1) Install
@@ -188,6 +224,7 @@ scripts/whoop-refresh-monitor.sh
 - `whoop sync pull --start YYYY-MM-DD --end YYYY-MM-DD --out ./whoop.jsonl`
 - `whoop webhook verify --secret ... --timestamp ... --signature ... --body-file ...`
 - `whoop activity map-v1-id --id <legacyV1ActivityId>`
+- `whoop openclaw install-skill --force`
 
 ### Behavior/experiments
 - `whoop behavior impacts --file ~/.whoop-cli/journal-observations.jsonl`

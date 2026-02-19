@@ -1,5 +1,5 @@
 {
-  "name": "whoop-cli",
+  "name": "@andreasnlarsen/whoop-cli",
   "version": "0.1.0",
   "description": "Open-source WHOOP CLI for humans and agents",
   "type": "module",
@@ -7,12 +7,24 @@
   "bin": {
     "whoop": "dist/index.js"
   },
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "dev": "tsx src/index.ts --help",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "tsx --test test/**/*.test.ts"
+    "test": "tsx --test test/**/*.test.ts",
+    "prepare": "npm run build",
+    "prepack": "npm run build"
   },
+  "files": [
+    "dist",
+    "openclaw-skill",
+    "scripts/whoop-refresh-monitor.sh",
+    "README.md",
+    "LICENSE"
+  ],
   "dependencies": {
     "commander": "^13.1.0",
     "zod": "^3.24.2"
