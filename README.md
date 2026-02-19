@@ -2,73 +2,139 @@
 
 Open-source WHOOP command-line client designed for both humans and automation agents (including OpenClaw skills).
 
-## Goals
+## Why this exists
 
-- **Reliable daily use** for personal metrics checks (recovery/sleep/strain/workouts/profile)
-- **Automation-friendly output** (`--json` envelopes, stable fields, exit codes)
-- **Safe OAuth handling** (token rotation, refresh lock, profile support)
-- **Agent-native UX** (commands shaped for scripting and OpenClaw workflows)
+WHOOP has an official developer platform (OAuth2 + API + webhooks), but no official first-party CLI. This project provides:
 
-## Research baseline (WHOOP official docs)
+- agent-safe JSON output contracts
+- robust token refresh for unattended jobs
+- decision-oriented commands (`day-brief`, `health flags`, `strain-plan`)
 
-- WHOOP provides an official OAuth2 + API platform (no official first-party CLI).
-- OAuth endpoints:
-  - Auth URL: `https://api.prod.whoop.com/oauth/oauth2/auth`
-  - Token URL: `https://api.prod.whoop.com/oauth/oauth2/token`
-- Core read scopes: `read:recovery`, `read:cycles`, `read:workout`, `read:sleep`, `read:profile`, `read:body_measurement`
-- Webhooks support v2 UUID model + signature verification via `X-WHOOP-Signature` and timestamp header.
+## Install (local dev)
 
-Primary refs:
-- https://developer.whoop.com/api/
-- https://developer.whoop.com/docs/developing/oauth/
-- https://developer.whoop.com/docs/developing/webhooks/
-- https://developer.whoop.com/docs/developing/getting-started/
+```bash
+npm install
+npm run build
+node dist/index.js --help
+```
 
-## Architecture summary
+## OAuth setup
 
-Detailed design: [ARCHITECTURE.md](./ARCHITECTURE.md)
+Create a WHOOP app in the Developer Dashboard and collect:
 
-Core modules:
-- `src/cli.ts` - command parser + envelope handling
-- `src/auth/` - OAuth login + token refresh + token locking
-- `src/http/` - WHOOP API client + retry/backoff + typed errors
-- `src/commands/` - command handlers (`recovery`, `sleep`, `cycle`, `workout`, `profile`, `webhook`)
-- `src/store/` - profile/token storage abstraction (keychain-backed if available)
-- `src/output/` - human + JSON renderers
+- client id
+- client secret
+- redirect URI
 
-## Planned command surface
+Then authenticate:
+
+```bash
+whoop auth login \
+  --client-id "$WHOOP_CLIENT_ID" \
+  --client-secret "$WHOOP_CLIENT_SECRET" \
+  --redirect-uri "$WHOOP_REDIRECT_URI"
+```
+
+You can also set env vars:
+
+- `WHOOP_CLIENT_ID`
+- `WHOOP_CLIENT_SECRET`
+- `WHOOP_REDIRECT_URI`
+
+## Global flags
+
+- `--json` output `{data,error}` envelope
+- `--pretty` pretty-print JSON
+- `--profile <name>` profile slot (default `default`)
+- `--base-url <url>` defaults to `https://api.prod.whoop.com`
+- `--timeout-ms <n>` request timeout
+
+## Command surface
+
+### Auth
 
 - `whoop auth login`
 - `whoop auth status`
 - `whoop auth refresh`
+- `whoop auth logout`
+
+### Core reads
+
 - `whoop profile show`
-- `whoop recovery latest`
-- `whoop sleep latest`
-- `whoop cycle latest`
-- `whoop workout list --start ... --end ...`
-- `whoop sync pull --start ... --end ... --out ./whoop.jsonl`
+- `whoop recovery latest|list`
+- `whoop sleep latest|list|trend`
+- `whoop cycle latest|list`
+- `whoop workout list|trend`
+
+### Planning + coaching
+
+- `whoop summary`
+- `whoop day-brief`
+- `whoop strain-plan`
+- `whoop health flags`
+- `whoop health trend`
+
+### Data + operations
+
+- `whoop sync pull --start YYYY-MM-DD --end YYYY-MM-DD --out ./whoop.jsonl`
 - `whoop webhook verify --secret ... --timestamp ... --signature ... --body-file ...`
 
-Global options:
-- `--json` (stable envelope: `{ data, error }`)
-- `--profile <name>`
-- `--timeout-ms <n>`
-- `--base-url <url>` (default WHOOP prod)
+### Behavior + experiments
 
-## OpenClaw integration target
+- `whoop behavior impacts --file ~/.whoop-cli/journal-observations.jsonl`
+- `whoop experiment start --name ... --behavior ...`
+- `whoop experiment list`
+- `whoop experiment report --id ...`
 
-- Ship a skill: `skills/whoop-cli/SKILL.md`
-- Keep deterministic flows for agent calls:
-  1. ensure auth
-  2. call read endpoint command
-  3. parse `--json`
-  4. summarize actionable signals
+## JSON envelope contract
 
-## Current status
+Success:
 
-Scaffold + architecture complete. Implementation next:
-1. OAuth login callback flow
-2. API client + typed models
-3. `recovery latest`, `sleep latest`, `profile show`
-4. JSON envelope + robust errors
-5. first release (MIT)
+```json
+{ "data": {"...": "..."}, "error": null }
+```
+
+Error:
+
+```json
+{
+  "data": null,
+  "error": {
+    "code": "AUTH_ERROR",
+    "message": "...",
+    "details": {"...": "..."}
+  }
+}
+```
+
+## Exit codes
+
+- `0` success
+- `2` usage/config/feature-unavailable
+- `3` auth
+- `4` api/network
+- `1` internal unexpected
+
+## OpenClaw integration (intended)
+
+- morning brief cron: `whoop day-brief --json`
+- nightly trend: `whoop sleep trend --days 7 --json`
+- weekly export: `whoop sync pull ...`
+- health guardrails: `whoop health flags --json`
+
+## Notes on behavior impacts
+
+WHOOP public API currently does not expose Journal impact outputs directly in the same way as app UI behavior insights. The `behavior impacts` command supports a local behavior log JSONL to bridge this for personal experiments.
+
+## Security
+
+- tokens stored in `~/.whoop-cli/profiles/<name>.json` with strict file perms
+- refresh token flow supported for unattended automation
+- never print secrets by default
+
+## Sources
+
+- https://developer.whoop.com/api/
+- https://developer.whoop.com/docs/developing/oauth/
+- https://developer.whoop.com/docs/developing/webhooks/
+- https://developer.whoop.com/docs/developing/getting-started/

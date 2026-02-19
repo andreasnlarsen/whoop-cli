@@ -1,30 +1,30 @@
 # whoop-cli architecture
 
-## 1) Tech stack
+## 1) Stack and goals
 
 - **Runtime:** Node.js 20+
-- **Language:** TypeScript
+- **Language:** TypeScript (ESM)
 - **CLI parser:** `commander`
-- **HTTP:** native `fetch` (undici)
-- **Validation:** `zod`
-- **Optional secure storage:** `keytar` (fallback to file with strict perms)
+- **HTTP:** native `fetch`
+- **Validation/helpers:** light custom guards + typed error model
+- **Tests:** `node:test` via `tsx --test`
 
-Rationale: easy contributor onboarding, good agent operability, strong typing + schema guardrails.
+Design goals:
+- deterministic JSON contracts for agents
+- resilient OAuth token lifecycle for cron/automation
+- command surface aligned with WHOOP resources + planning workflows
 
-## 2) Project structure
+## 2) Implemented structure
 
 ```text
 src/
-  cli.ts
   index.ts
+  cli.ts
+  types.ts
   auth/
     oauth.ts
-    token-store.ts
     refresh-lock.ts
-  http/
-    client.ts
-    errors.ts
-    pagination.ts
+    token-service.ts
   commands/
     auth.ts
     profile.ts
@@ -32,92 +32,118 @@ src/
     sleep.ts
     cycle.ts
     workout.ts
+    summary.ts
+    health.ts
     sync.ts
     webhook.ts
+    behavior.ts
+    experiment.ts
+    context.ts
+  http/
+    client.ts
+    errors.ts
+    whoop-data.ts
   models/
     whoop.ts
   output/
     envelope.ts
-    table.ts
+  store/
+    profile-store.ts
   util/
-    time.ts
     config.ts
+    fs.ts
+    metrics.ts
+    open-browser.ts
+    prompt.ts
+    time.ts
+    webhook-signature.ts
+
+test/
+  envelope.test.ts
+  time.test.ts
+  webhook-signature.test.ts
 ```
 
-## 3) OAuth strategy
+## 3) OAuth model
 
-### Preferred flow
-`auth login` launches browser to WHOOP auth URL and spins local callback listener (`http://127.0.0.1:<port>/callback`).
+### Supported flow
+- `whoop auth login` prints auth URL and optionally opens browser.
+- User pastes full redirect URL or auth code.
+- CLI exchanges code at WHOOP token endpoint.
 
-### Non-interactive fallback
-Support manual code exchange mode:
-- print auth URL
-- user pastes redirected URL/code
-- CLI exchanges code for tokens
+### Token handling
+- Tokens stored per profile in `~/.whoop-cli/profiles/<name>.json`
+- File writes are atomic + mode `0600`
+- Refresh runs proactively (expiry skew) and on-demand (`auth refresh`)
+- Single-flight lock prevents concurrent refresh races
 
-### Token lifecycle
-- persist `access_token`, `refresh_token`, `expires_at`, `scope`, `token_type`
-- refresh proactively (e.g., when <120s left)
-- single-flight refresh lock to avoid concurrent refresh races
+## 4) API integration model
 
-## 4) Data model + commands
+- Base URL default: `https://api.prod.whoop.com`
+- Endpoints currently used:
+  - `/developer/v2/user/profile/basic`
+  - `/developer/v2/user/measurement/body`
+  - `/developer/v2/recovery`
+  - `/developer/v2/cycle`
+  - `/developer/v2/activity/sleep`
+  - `/developer/v2/activity/workout`
+- Collection pagination supported via `next_token`
 
-Command principles:
-- all commands return stable envelope under `--json`
-- command names map directly to WHOOP resources
-- pagination abstracted (`next_token` handling)
+## 5) Output contract (agent-first)
 
-Examples:
-- `recovery latest` -> recent record by sleep start desc
-- `sleep latest` -> most recent sleep
-- `workout list` -> bounded window, optional `--limit`
-
-## 5) Agent-first output contract
-
-JSON envelope:
+All commands support global `--json` envelope:
 
 ```json
 { "data": {"...": "..."}, "error": null }
 ```
 
-Error envelope:
+Errors:
 
 ```json
 {
   "data": null,
   "error": {
-    "code": "HTTP_401",
-    "message": "Unauthorized",
-    "details": {"status": 401, "requestId": "..."}
+    "code": "AUTH_ERROR",
+    "message": "...",
+    "details": {"...": "..."}
   }
 }
 ```
 
 Exit codes:
 - `0` success
-- `2` usage/config error
-- `3` auth error
-- `4` API/network error
+- `2` usage/config/feature-unavailable
+- `3` auth
+- `4` API/network
+- `1` unexpected/internal
 
-## 6) Open-source quality baseline
+## 6) Command groups
 
-- MIT license
-- conventional commits
-- CI: lint + typecheck + test
-- release via npm + GitHub releases
-- semantic versioning
+- `auth`: login/status/refresh/logout
+- `profile`: show
+- `recovery`: latest/list
+- `sleep`: latest/list/trend
+- `cycle`: latest/list
+- `workout`: list/trend
+- `summary`: one-line snapshot
+- `day-brief`: readiness guidance
+- `strain-plan`: intensity recommendation
+- `health`: flags/trend
+- `sync`: pull export (JSONL)
+- `webhook`: signature verification
+- `behavior`: local behavior impact analysis
+- `experiment`: start/list/report
 
-## 7) OpenClaw skill integration
+## 7) Security
 
-Skill should guide agent to:
-1. check `whoop auth status`
-2. run command with `--json`
-3. summarize concise insights (no raw dump)
-4. use safe retries for transient network failures
+- never log secrets intentionally
+- token persistence with strict file permissions
+- webhook verification uses HMAC-SHA256 + base64 + timing-safe compare
 
-## 8) Security notes
+## 8) OpenClaw integration pattern
 
-- never print client secret
-- redact token strings in logs
-- strict file perms on local token cache
-- verify webhook signatures with HMAC-SHA256 + base64
+Recommended flows:
+1. `whoop auth status --json`
+2. data command (`day-brief`, `summary`, `health flags`) with `--json`
+3. concise agent interpretation + scheduling/reminders
+4. periodic `auth refresh` health checks for unattended jobs
