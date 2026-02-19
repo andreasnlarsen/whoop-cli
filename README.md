@@ -21,6 +21,17 @@ That means each user (or each installer/agent) must create a WHOOP Developer app
 
 There is **no managed/shared auth service** in this repo right now.
 
+## Important legal / brand notice
+
+- This project is **unofficial** and is **not affiliated with, endorsed by, or sponsored by Whoop, Inc.**
+- **WHOOP** is a trademark of Whoop, Inc., used here for compatibility/reference only.
+- This CLI is built to work with the WHOOP developer API, but you are responsible for complying with:
+  - WHOOP API Terms of Use
+  - WHOOP brand/design guidelines
+  - applicable privacy and data-protection laws
+- Do **not** embed or publish client secrets/tokens in source code, examples, or public logs.
+- If WHOOP requests naming/branding/compliance changes, maintainers should address them promptly and cooperatively.
+
 ---
 
 ## Quick start
@@ -230,3 +241,6 @@ Exit codes:
 - https://developer.whoop.com/docs/developing/oauth/
 - https://developer.whoop.com/docs/developing/webhooks/
 - https://developer.whoop.com/docs/developing/getting-started/
+- https://developer.whoop.com/api-terms-of-use/
+- https://developer.whoop.com/docs/developing/design-guidelines/
+- https://developer.whoop.com/docs/developing/app-approval/
