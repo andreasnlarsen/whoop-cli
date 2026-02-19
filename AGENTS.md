@@ -6,6 +6,7 @@ Agent operating guide for `whoop-cli`.
 
 - Repo: `andreasnlarsen/whoop-cli`
 - Package: `@andreasnlarsen/whoop-cli`
+- ClawHub skill slug: `whoop-cli` (display name: `WHOOP CLI for Agents`)
 - Release model: npm trusted publishing via GitHub Actions OIDC
 
 ## Day-to-day rules
@@ -63,6 +64,29 @@ npm view @andreasnlarsen/whoop-cli version dist-tags.latest --json
 ```
 
 Expected: latest is `X.Y.Z`.
+
+### E) Publish ClawHub skill update (keep installer aligned with npm release)
+
+After npm `X.Y.Z` is live, update and publish the bundled skill so agent installs resolve to that exact package version.
+
+1) Update `openclaw-skill/SKILL.md`:
+- `metadata.openclaw.install[].package` -> `@andreasnlarsen/whoop-cli@X.Y.Z`
+- install snippet -> `npm install -g @andreasnlarsen/whoop-cli@X.Y.Z`
+
+2) Merge that change via PR (same protected-branch rule: no direct push to `main`).
+
+3) Publish to ClawHub with a new skill version:
+
+```bash
+npx -y clawhub publish ./openclaw-skill \
+  --slug whoop-cli \
+  --name "WHOOP CLI for Agents" \
+  --version <skill-semver> \
+  --changelog "Align skill installer to @andreasnlarsen/whoop-cli@X.Y.Z" \
+  --tags latest
+```
+
+4) Verify by installing to a temp workdir and checking installed `SKILL.md` references `@andreasnlarsen/whoop-cli@X.Y.Z`.
 
 ## Trusted publishing notes
 
