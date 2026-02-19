@@ -1,0 +1,25 @@
+{
+  "name": "whoop-cli",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Open-source WHOOP CLI for humans and agents",
+  "type": "module",
+  "bin": {
+    "whoop": "dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "tsx src/index.ts --help",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "commander": "^13.1.0",
+    "zod": "^3.24.2"
+  },
+  "devDependencies": {
+    "tsx": "^4.19.3",
+    "typescript": "^5.8.2",
+    "@types/node": "^22.13.10"
+  }
+}
