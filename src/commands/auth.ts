@@ -97,7 +97,7 @@ export const registerAuthCommands = (program: Command): void => {
 
         let openAttempted = false;
         if (opts.open !== false) {
-          openAttempted = tryOpenBrowser(authUrl);
+          openAttempted = await tryOpenBrowser(authUrl);
         }
 
         let code = opts.code as string | undefined;
