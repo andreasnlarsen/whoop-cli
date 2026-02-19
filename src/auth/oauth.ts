@@ -95,15 +95,17 @@ export const exchangeAuthCode = async (
 export const refreshAuthToken = async (
   config: OAuthClientConfig,
   refreshToken: string,
-  scope?: string,
 ): Promise<OAuthTokenResponse> => {
   if (!refreshToken) throw usageError('Refresh token is required');
+
+  // WHOOP docs (OAuth refresh flow) require scope=offline in refresh requests.
+  // Using token-issued scope strings here can produce malformed refresh requests.
   return exchange(config, {
     grant_type: 'refresh_token',
     refresh_token: refreshToken,
     client_id: config.clientId,
     client_secret: config.clientSecret,
-    ...(scope ? { scope } : {}),
+    scope: 'offline',
   });
 };
 

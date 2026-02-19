@@ -61,7 +61,7 @@ export const refreshProfileToken = async (profileName: string): Promise<WhoopPro
       throw authError('No refresh token available. Re-run whoop auth login with offline scope.');
     }
 
-    const refreshed = await refreshAuthToken(toOAuthConfig(profile), refreshToken, profile.tokens?.scope);
+    const refreshed = await refreshAuthToken(toOAuthConfig(profile), refreshToken);
     profile.tokens = tokenFromOAuth(refreshed, refreshToken);
     await saveProfile(profileName, profile);
     return profile;
