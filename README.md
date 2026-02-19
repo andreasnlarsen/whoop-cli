@@ -40,14 +40,33 @@ node dist/index.js --help
 
 (If installed globally later, use `whoop ...` directly.)
 
+### Command name
+
+The executable is `whoop` (not `whoop-cli`).
+
 ## 2) Create WHOOP app
 
-- Open: https://developer-dashboard.whoop.com/
-- Create app
-- Copy:
-  - client id
-  - client secret
-  - redirect URI
+Open: https://developer-dashboard.whoop.com/
+
+Create an app and set these fields:
+
+- **App name:** anything (example: `whoop-cli`)
+- **Redirect URI:** use one value and keep it consistent
+  - recommended: `http://localhost:1234/callback`
+  - accepted alternative: `https://localhost:1234/callback`
+- **Scopes:** include at least
+  - `read:recovery`
+  - `read:cycles`
+  - `read:workout`
+  - `read:sleep`
+  - `read:profile`
+  - `read:body_measurement`
+  - `offline` (for refresh token)
+
+Then copy these 3 values from WHOOP dashboard:
+- client id
+- client secret
+- redirect URI
 
 ## 3) Login
 
