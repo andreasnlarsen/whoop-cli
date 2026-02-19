@@ -12,6 +12,7 @@ import { registerWebhookCommands } from './commands/webhook.js';
 import { registerBehaviorCommands } from './commands/behavior.js';
 import { registerExperimentCommands } from './commands/experiment.js';
 import { registerActivityCommands } from './commands/activity.js';
+import { registerOpenClawCommands } from './commands/openclaw.js';
 
 export const program = new Command()
   .name('whoop')
@@ -35,3 +36,4 @@ registerWebhookCommands(program);
 registerBehaviorCommands(program);
 registerExperimentCommands(program);
 registerActivityCommands(program);
+registerOpenClawCommands(program);
