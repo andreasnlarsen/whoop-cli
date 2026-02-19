@@ -1,6 +1,6 @@
 ---
 name: whoop-cli
-description: Use whoop-cli to fetch WHOOP data, generate day briefs/health flags, and export trend data for automation workflows.
+description: Companion skill for @andreasnlarsen/whoop-cli: agent-friendly WHOOP access via stable CLI JSON (day briefs, health flags, trends, exports) without raw API plumbing.
 metadata:
   openclaw:
     requires:
