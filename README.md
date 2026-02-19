@@ -32,6 +32,18 @@ There is **no managed/shared auth service** in this repo right now.
 - Do **not** embed or publish client secrets/tokens in source code, examples, or public logs.
 - If WHOOP requests naming/branding/compliance changes, maintainers should address them promptly and cooperatively.
 
+## Trust & Safety (quick)
+
+- Package: `@andreasnlarsen/whoop-cli`
+- Releases are published via GitHub Actions trusted publishing (OIDC) with npm provenance.
+- This integration is unofficial and not affiliated with Whoop, Inc.
+- Never paste OAuth client secrets/tokens into chat. Run login locally:
+  - `whoop auth login --client-id ... --client-secret ... --redirect-uri ...`
+- Verify install quickly:
+  - `npx -y @andreasnlarsen/whoop-cli --help`
+  - `whoop auth status --json`
+  - `whoop day-brief --json`
+
 ---
 
 ## One-line options (no clone)
