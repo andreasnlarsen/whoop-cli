@@ -14,7 +14,7 @@ metadata:
     homepage: https://github.com/andreasnlarsen/whoop-cli
     install:
       - kind: node
-        package: "@andreasnlarsen/whoop-cli@0.2.0"
+        package: "@andreasnlarsen/whoop-cli@0.3.0"
         bins:
           - whoop
         label: Install whoop-cli from npm
@@ -37,7 +37,7 @@ Use the installed `whoop` command.
 If `whoop` is missing:
 
 ```bash
-npm install -g @andreasnlarsen/whoop-cli@0.2.0
+npm install -g @andreasnlarsen/whoop-cli@0.3.0
 ```
 
 Optional OpenClaw skill install from package bundle:
