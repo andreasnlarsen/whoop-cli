@@ -8,6 +8,10 @@ export const assertIsoDate = (value: string, label = 'date'): string => {
   if (!isIsoDate(value)) {
     throw usageError(`${label} must be in YYYY-MM-DD format`, { value });
   }
+  const parsed = new Date(`${value}T00:00:00Z`);
+  if (Number.isNaN(parsed.getTime()) || dateToIso(parsed) !== value) {
+    throw usageError(`${label} must be a valid YYYY-MM-DD date`, { value });
+  }
   return value;
 };
 

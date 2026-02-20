@@ -281,9 +281,20 @@ whoop activity list --days 30 --json | jq '.data.records | map(select(.sport_id 
 
 ### Behavior/experiments
 - `whoop behavior impacts --file ~/.whoop-cli/journal-observations.jsonl`
-- `whoop experiment start --name ... --behavior ...`
+- `whoop experiment plan --name ... --behavior ... --start-date YYYY-MM-DD [--end-date YYYY-MM-DD]`
+- `whoop experiment start --name ... --behavior ... [--start-date YYYY-MM-DD] [--end-date YYYY-MM-DD]`
+- `whoop experiment status [--status planned|running|completed] [--id ...]`
 - `whoop experiment list`
 - `whoop experiment report --id ...`
+
+Recommended single-source workflow:
+
+1. `whoop experiment plan ...`
+2. `whoop experiment status ...`
+3. `whoop experiment report --id ...`
+
+`~/.whoop-cli/experiments.json` is the canonical experiment state. Agent outputs include
+`experimentsFile` so automations can verify they are reading from that file.
 
 ---
 
