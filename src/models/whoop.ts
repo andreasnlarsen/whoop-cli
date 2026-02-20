@@ -51,6 +51,7 @@ export interface CycleRecord {
 export interface WorkoutRecord {
   id: string;
   sport_name?: string;
+  sport_id?: number;
   start?: string;
   end?: string;
   score?: {

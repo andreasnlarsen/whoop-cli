@@ -248,6 +248,7 @@ scripts/whoop-refresh-monitor.sh
 - `whoop sleep latest|list|trend`
 - `whoop cycle latest|list`
 - `whoop workout list|trend`
+  - Note: WHOOP auto-detected generic `activity` entries can be unlabeled daily movement (e.g., housework), not true workouts. Use `--exclude-generic-activity` for training-only analysis.
 
 ### Ops
 - `whoop sync pull --start YYYY-MM-DD --end YYYY-MM-DD --out ./whoop.jsonl`
