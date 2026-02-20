@@ -247,8 +247,31 @@ scripts/whoop-refresh-monitor.sh
 - `whoop recovery latest|list`
 - `whoop sleep latest|list|trend`
 - `whoop cycle latest|list`
-- `whoop workout list|trend`
-  - Note: WHOOP auto-detected generic `activity` entries can be unlabeled daily movement (e.g., housework), not true workouts. Use `--exclude-generic-activity` for training-only analysis.
+- `whoop activity list|trend|types`
+  - `whoop activity` is the canonical source for movement/training records.
+  - WHOOP generic `activity` entries are auto-detected and can be unlabeled movement (housework/incidental activity), not necessarily intentional training.
+  - Use filters (`--labeled-only`, `--generic-only`, `--sport-id`, `--sport-name`) for analysis slices.
+
+### Agent-first filtering pattern (recommended)
+
+Use raw `activity` output as your source of truth, then filter for the task.
+
+Examples:
+
+```bash
+# All activities in a window
+whoop activity list --days 30 --json --pretty
+
+# Training-only slice (exclude generic auto-detected activity)
+whoop activity list --days 30 --labeled-only --json --pretty
+
+# Specific type slice (stable by IDs or names returned from `activity types`)
+whoop activity list --days 30 --sport-id 63 --json --pretty
+whoop activity list --days 30 --sport-name walking --json --pretty
+
+# Optional shell-side filtering when jq is available
+whoop activity list --days 30 --json | jq '.data.records | map(select(.sport_id != -1))'
+```
 
 ### Ops
 - `whoop sync pull --start YYYY-MM-DD --end YYYY-MM-DD --out ./whoop.jsonl`

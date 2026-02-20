@@ -48,7 +48,7 @@ export interface CycleRecord {
   [k: string]: unknown;
 }
 
-export interface WorkoutRecord {
+export interface ActivityRecord {
   id: string;
   sport_name?: string;
   sport_id?: number;
