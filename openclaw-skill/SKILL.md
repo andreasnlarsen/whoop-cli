@@ -61,16 +61,28 @@ whoop openclaw install-skill --force
   - `whoop day-brief --json --pretty`
   - `whoop strain-plan --json --pretty`
   - `whoop health flags --days 7 --json --pretty`
-- Trends:
-  - `whoop sleep trend --days 30 --json --pretty`
-  - `whoop workout trend --days 14 --json --pretty`
-  - For training-only reporting, prefer `whoop workout trend --days 14 --exclude-generic-activity --json --pretty`
+- Activity analysis:
+  - `whoop activity list --days 30 --json --pretty`
+  - `whoop activity trend --days 30 --json --pretty`
+  - `whoop activity types --days 30 --json --pretty`
+  - training-only: `whoop activity trend --days 30 --labeled-only --json --pretty`
 
-### Workout interpretation guardrail (important)
+### Activity interpretation guardrail (important)
 
-- WHOOP auto-detected generic `activity` rows are often unlabeled movement (for example housework or incidental activity), not necessarily intentional workouts.
+- WHOOP generic `activity` rows (often `sport_id=-1`) are auto-detected and may be unlabeled movement (housework/incidental activity), not intentional training.
 - Do not treat generic `activity` as confirmed training volume by default.
-- For coaching/training recommendations, prefer workout commands with `--exclude-generic-activity` and call out the filtered vs total counts.
+- For coaching/training recommendations, default to `--labeled-only` and report both total vs filtered counts.
+
+### Agent filtering pattern (jq-friendly)
+
+- Canonical source: `whoop activity list --json`
+- Prefer built-in filters first (`--labeled-only`, `--generic-only`, `--sport-id`, `--sport-name`).
+- If custom slicing is needed and `jq` is available, filter shell-side from raw JSON (example):
+
+```bash
+whoop activity list --days 30 --json | jq '.data.records | map(select(.sport_id != -1))'
+```
+
 - Export:
   - `whoop sync pull --start YYYY-MM-DD --end YYYY-MM-DD --out ./whoop.jsonl --json --pretty`
 

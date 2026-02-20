@@ -1,7 +1,7 @@
 import { Command } from 'commander';
 import { writeFile } from 'node:fs/promises';
 import { WhoopApiClient } from '../http/client.js';
-import { fetchCycles, fetchRecoveries, fetchSleeps, fetchWorkouts } from '../http/whoop-data.js';
+import { fetchActivities, fetchCycles, fetchRecoveries, fetchSleeps } from '../http/whoop-data.js';
 import { getGlobalOptions, printData, printError } from './context.js';
 import { parseDateRange } from '../util/time.js';
 import { usageError } from '../http/errors.js';
@@ -34,18 +34,18 @@ export const registerSyncCommands = (program: Command): void => {
         const client = new WhoopApiClient(globals.profile);
         const limit = Number(opts.limit ?? 25);
 
-        const [recoveries, sleeps, cycles, workouts] = await Promise.all([
+        const [recoveries, sleeps, cycles, activities] = await Promise.all([
           fetchRecoveries(client, { ...range, all: true, limit, timeoutMs: globals.timeoutMs }),
           fetchSleeps(client, { ...range, all: true, limit, timeoutMs: globals.timeoutMs }),
           fetchCycles(client, { ...range, all: true, limit, timeoutMs: globals.timeoutMs }),
-          fetchWorkouts(client, { ...range, all: true, limit, timeoutMs: globals.timeoutMs }),
+          fetchActivities(client, { ...range, all: true, limit, timeoutMs: globals.timeoutMs }),
         ]);
 
         const rows: Array<{ type: string; payload: unknown }> = [];
         recoveries.forEach((r) => rows.push({ type: 'recovery', payload: r }));
         sleeps.forEach((r) => rows.push({ type: 'sleep', payload: r }));
         cycles.forEach((r) => rows.push({ type: 'cycle', payload: r }));
-        workouts.forEach((r) => rows.push({ type: 'workout', payload: r }));
+        activities.forEach((r) => rows.push({ type: 'activity', payload: r }));
 
         await writeFile(out, jsonl(rows), 'utf8');
 
@@ -56,7 +56,7 @@ export const registerSyncCommands = (program: Command): void => {
             recoveries: recoveries.length,
             sleeps: sleeps.length,
             cycles: cycles.length,
-            workouts: workouts.length,
+            activities: activities.length,
             totalRows: rows.length,
           },
         });

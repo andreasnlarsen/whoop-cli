@@ -31,7 +31,7 @@ src/
     recovery.ts
     sleep.ts
     cycle.ts
-    workout.ts
+    activity.ts
     summary.ts
     health.ts
     sync.ts
@@ -50,6 +50,7 @@ src/
   store/
     profile-store.ts
   util/
+    activity.ts
     config.ts
     fs.ts
     metrics.ts
@@ -59,6 +60,7 @@ src/
     webhook-signature.ts
 
 test/
+  activity-utils.test.ts
   envelope.test.ts
   time.test.ts
   webhook-signature.test.ts
@@ -124,7 +126,7 @@ Exit codes:
 - `recovery`: latest/list
 - `sleep`: latest/list/trend
 - `cycle`: latest/list
-- `workout`: list/trend
+- `activity`: list/trend/types + v1→v2 mapping
 - `summary`: one-line snapshot
 - `day-brief`: readiness guidance
 - `strain-plan`: intensity recommendation

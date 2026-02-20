@@ -1,6 +1,7 @@
 import { Command } from 'commander';
 import { WhoopApiClient } from '../http/client.js';
-import { fetchCycles, fetchRecoveries, fetchSleeps, fetchWorkouts } from '../http/whoop-data.js';
+import { fetchActivities, fetchCycles, fetchRecoveries, fetchSleeps } from '../http/whoop-data.js';
+import { isGenericActivity } from '../util/activity.js';
 import { classifyRecovery } from '../util/metrics.js';
 import { getGlobalOptions, printData, printError } from './context.js';
 
@@ -18,18 +19,18 @@ const recommendLoad = (recoveryScore?: number): { target: string; note: string }
 };
 
 const fetchDailyCore = async (client: WhoopApiClient, timeoutMs: number) => {
-  const [recovery, sleep, cycle, workouts] = await Promise.all([
+  const [recovery, sleep, cycle, activities] = await Promise.all([
     fetchRecoveries(client, { limit: 1, timeoutMs }),
     fetchSleeps(client, { limit: 1, timeoutMs }),
     fetchCycles(client, { limit: 1, timeoutMs }),
-    fetchWorkouts(client, { limit: 5, timeoutMs }),
+    fetchActivities(client, { limit: 5, timeoutMs }),
   ]);
 
   return {
     recovery: recovery[0] ?? null,
     sleep: sleep[0] ?? null,
     cycle: cycle[0] ?? null,
-    workouts,
+    activities,
   };
 };
 
@@ -43,13 +44,17 @@ export const registerSummaryCommands = (program: Command): void => {
         const client = new WhoopApiClient(globals.profile);
         const core = await fetchDailyCore(client, globals.timeoutMs);
 
+        const genericActivityCount = core.activities.filter(isGenericActivity).length;
+
         const payload = {
           recoveryScore: core.recovery?.score?.recovery_score ?? null,
           hrv: core.recovery?.score?.hrv_rmssd_milli ?? null,
           restingHr: core.recovery?.score?.resting_heart_rate ?? null,
           sleepPerformance: core.sleep?.score?.sleep_performance_percentage ?? null,
           cycleStrain: core.cycle?.score?.strain ?? null,
-          recentWorkouts: core.workouts.length,
+          recentActivities: core.activities.length,
+          recentStructuredActivities: core.activities.length - genericActivityCount,
+          recentGenericActivities: genericActivityCount,
         };
 
         printData(this, payload);

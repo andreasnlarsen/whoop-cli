@@ -1,5 +1,5 @@
 import { WhoopApiClient } from './client.js';
-import type { CycleRecord, RecoveryRecord, SleepRecord, WorkoutRecord } from '../models/whoop.js';
+import type { ActivityRecord, CycleRecord, RecoveryRecord, SleepRecord } from '../models/whoop.js';
 
 export const fetchRecoveries = async (
   client: WhoopApiClient,
@@ -37,11 +37,11 @@ export const fetchCycles = async (
     timeoutMs: opts.timeoutMs,
   });
 
-export const fetchWorkouts = async (
+export const fetchActivities = async (
   client: WhoopApiClient,
   opts: { start?: string; end?: string; limit?: number; all?: boolean; timeoutMs: number },
-): Promise<WorkoutRecord[]> =>
-  client.getCollection<WorkoutRecord>('/developer/v2/activity/workout', {
+): Promise<ActivityRecord[]> =>
+  client.getCollection<ActivityRecord>('/developer/v2/activity/workout', {
     start: opts.start,
     end: opts.end,
     limit: opts.limit,
