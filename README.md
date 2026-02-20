@@ -281,21 +281,23 @@ whoop activity list --days 30 --json | jq '.data.records | map(select(.sport_id 
 
 ### Behavior/experiments
 - `whoop behavior impacts --file ~/.whoop-cli/journal-observations.jsonl`
-- `whoop experiment plan --name ... --behavior ... --start-date YYYY-MM-DD [--end-date YYYY-MM-DD]`
-- `whoop experiment start --name ... --behavior ... [--start-date YYYY-MM-DD] [--end-date YYYY-MM-DD]`
+- `whoop experiment plan --name ... --behavior ... --start-date YYYY-MM-DD [--end-date YYYY-MM-DD] [--description ... --why ... --hypothesis ... --success-criteria ... --protocol ...]`
+- `whoop experiment start --name ... --behavior ... [--start-date YYYY-MM-DD] [--end-date YYYY-MM-DD] [--description ... --why ... --hypothesis ... --success-criteria ... --protocol ...]`
+- `whoop experiment context --id ... [--description ... --why ... --hypothesis ... --success-criteria ... --protocol ...]`
 - `whoop experiment status [--status planned|running|completed] [--id ...]`
 - `whoop experiment list`
 - `whoop experiment report --id ...`
 
 Recommended single-source workflow:
 
-1. `whoop experiment plan ...`
-2. `whoop experiment status ...`
-3. `whoop experiment report --id ...`
+1. `whoop experiment plan ...` (capture context at creation time)
+2. `whoop experiment context --id ...` (optional updates)
+3. `whoop experiment status ...`
+4. `whoop experiment report --id ...`
 
 Profile scope behavior:
 - Experiments are scoped to active `--profile` by default.
-- Use `--all-profiles` on `experiment list|status|report` when you explicitly want cross-profile views.
+- Use `--all-profiles` on `experiment list|status|report|context` when you explicitly want cross-profile views.
 
 `~/.whoop-cli/experiments.json` is the canonical experiment state. Agent outputs include
 `sourceOfTruth` (and `experimentsFile` compatibility alias) so automations can verify source path.
