@@ -13,7 +13,12 @@ import {
   type ExperimentStatus,
   withDerivedStatus,
 } from '../util/experiment-status.js';
-import { filterExperimentsByProfile } from '../util/experiment-scope.js';
+import { filterExperimentsByProfile, normalizeExperimentProfile } from '../util/experiment-scope.js';
+import {
+  mergeExperimentContext,
+  normalizeExperimentContext,
+  type ExperimentContext,
+} from '../util/experiment-context.js';
 
 interface Experiment {
   id: string;
@@ -23,6 +28,7 @@ interface Experiment {
   endDate?: string;
   createdAt: string;
   profile?: string;
+  context?: ExperimentContext;
 }
 
 interface ExperimentStore {
@@ -50,6 +56,23 @@ const sourceMeta = (): { sourceOfTruth: string; experimentsFile: string } => {
   };
 };
 
+const addContextOptions = (command: Command): Command =>
+  command
+    .option('--description <text>', 'short plain-language description')
+    .option('--why <text>', 'why this experiment matters')
+    .option('--hypothesis <text>', 'expected outcome/hypothesis')
+    .option('--success-criteria <text>', 'what counts as success')
+    .option('--protocol <text>', 'execution protocol/constraints');
+
+const extractContextFromOptions = (opts: Record<string, unknown>): ExperimentContext | undefined =>
+  normalizeExperimentContext({
+    description: opts.description,
+    why: opts.why,
+    hypothesis: opts.hypothesis,
+    successCriteria: opts.successCriteria,
+    protocol: opts.protocol,
+  });
+
 const assertStatus = (value: string | undefined): ExperimentStatus | undefined => {
   if (!value) return undefined;
   if (STATUS_VALUES.includes(value as ExperimentStatus)) {
@@ -70,6 +93,7 @@ const createExperiment = async (input: {
   startDate: string;
   endDate?: string;
   profile: string;
+  context?: ExperimentContext;
 }): Promise<Experiment> => {
   const store = await loadStore();
   const item: Experiment = {
@@ -80,6 +104,7 @@ const createExperiment = async (input: {
     endDate: input.endDate,
     createdAt: new Date().toISOString(),
     profile: input.profile,
+    context: input.context,
   };
 
   store.experiments.unshift(item);
@@ -93,72 +118,188 @@ const getScopedExperiments = (
   allProfiles: boolean,
 ): Array<Experiment & { profile: string }> => filterExperimentsByProfile(experiments, profile, allProfiles);
 
+const findByIdInScope = (
+  store: ExperimentStore,
+  profile: string,
+  allProfiles: boolean,
+  id: string,
+): {
+  found: (Experiment & { profile: string }) | undefined;
+  foundOnDifferentProfile: (Experiment & { profile: string }) | undefined;
+} => {
+  const scoped = getScopedExperiments(store.experiments, profile, allProfiles);
+  const found = scoped.find((item) => item.id === id);
+  if (found) return { found, foundOnDifferentProfile: undefined };
+
+  const all = getScopedExperiments(store.experiments, profile, true);
+  return {
+    found: undefined,
+    foundOnDifferentProfile: all.find((item) => item.id === id),
+  };
+};
+
+const assertFoundExperiment = (
+  id: string,
+  activeProfile: string,
+  includeAllProfiles: boolean,
+  found: (Experiment & { profile: string }) | undefined,
+  foundOnDifferentProfile: (Experiment & { profile: string }) | undefined,
+): Experiment & { profile: string } => {
+  if (found) return found;
+
+  if (foundOnDifferentProfile && !includeAllProfiles) {
+    throw usageError('Experiment exists on a different profile', {
+      id,
+      activeProfile,
+      experimentProfile: foundOnDifferentProfile.profile,
+      hint: 'Use --all-profiles to query across profiles, or run with --profile matching the experiment.',
+    });
+  }
+
+  throw usageError('Experiment not found', { id });
+};
+
 export const registerExperimentCommands = (program: Command): void => {
   const experiment = program.command('experiment').description('Behavior experiment tracking');
 
-  experiment
-    .command('start')
-    .description('Start a behavior experiment')
-    .requiredOption('--name <name>')
-    .requiredOption('--behavior <behavior>')
-    .option('--start-date <YYYY-MM-DD>', 'default: today UTC')
-    .option('--end-date <YYYY-MM-DD>')
-    .action(async function startAction(opts) {
-      try {
-        const globals = getGlobalOptions(this);
-        const startDate = opts.startDate ? assertIsoDate(opts.startDate, 'start-date') : daysAgoIso(0);
-        const endDate = opts.endDate ? assertIsoDate(opts.endDate, 'end-date') : undefined;
-        assertWindow(startDate, endDate);
+  addContextOptions(
+    experiment
+      .command('start')
+      .description('Start a behavior experiment')
+      .requiredOption('--name <name>')
+      .requiredOption('--behavior <behavior>')
+      .option('--start-date <YYYY-MM-DD>', 'default: today UTC')
+      .option('--end-date <YYYY-MM-DD>'),
+  ).action(async function startAction(opts) {
+    try {
+      const globals = getGlobalOptions(this);
+      const startDate = opts.startDate ? assertIsoDate(opts.startDate, 'start-date') : daysAgoIso(0);
+      const endDate = opts.endDate ? assertIsoDate(opts.endDate, 'end-date') : undefined;
+      const context = extractContextFromOptions(opts);
+      assertWindow(startDate, endDate);
 
-        const item = await createExperiment({
-          name: String(opts.name),
-          behavior: String(opts.behavior),
-          startDate,
-          endDate,
-          profile: globals.profile,
-        });
-        const todayIso = dateToIso(new Date());
+      const item = await createExperiment({
+        name: String(opts.name),
+        behavior: String(opts.behavior),
+        startDate,
+        endDate,
+        profile: globals.profile,
+        context,
+      });
+      const todayIso = dateToIso(new Date());
 
-        printData(this, {
-          ...withDerivedStatus(item as Experiment & { profile: string }, todayIso),
-          ...sourceMeta(),
-        });
-      } catch (err) {
-        printError(this, err);
+      printData(this, {
+        ...withDerivedStatus(item as Experiment & { profile: string }, todayIso),
+        ...sourceMeta(),
+      });
+    } catch (err) {
+      printError(this, err);
+    }
+  });
+
+  addContextOptions(
+    experiment
+      .command('plan')
+      .description('Create a planned behavior experiment')
+      .requiredOption('--name <name>')
+      .requiredOption('--behavior <behavior>')
+      .requiredOption('--start-date <YYYY-MM-DD>')
+      .option('--end-date <YYYY-MM-DD>'),
+  ).action(async function planAction(opts) {
+    try {
+      const globals = getGlobalOptions(this);
+      const startDate = assertIsoDate(opts.startDate, 'start-date');
+      const endDate = opts.endDate ? assertIsoDate(opts.endDate, 'end-date') : undefined;
+      const context = extractContextFromOptions(opts);
+      assertWindow(startDate, endDate);
+
+      const item = await createExperiment({
+        name: String(opts.name),
+        behavior: String(opts.behavior),
+        startDate,
+        endDate,
+        profile: globals.profile,
+        context,
+      });
+      const todayIso = dateToIso(new Date());
+
+      printData(this, {
+        ...withDerivedStatus(item as Experiment & { profile: string }, todayIso),
+        ...sourceMeta(),
+      });
+    } catch (err) {
+      printError(this, err);
+    }
+  });
+
+  addContextOptions(
+    experiment
+      .command('context')
+      .description('Attach or update context fields for an existing experiment')
+      .requiredOption('--id <experimentId>')
+      .option('--all-profiles', 'include experiments from all profiles'),
+  ).action(async function contextAction(opts) {
+    try {
+      const globals = getGlobalOptions(this);
+      const includeAllProfiles = Boolean(opts.allProfiles);
+      const contextUpdate = extractContextFromOptions(opts);
+
+      if (!contextUpdate) {
+        throw usageError(
+          'Provide at least one context field: --description, --why, --hypothesis, --success-criteria, --protocol',
+        );
       }
-    });
 
-  experiment
-    .command('plan')
-    .description('Create a planned behavior experiment')
-    .requiredOption('--name <name>')
-    .requiredOption('--behavior <behavior>')
-    .requiredOption('--start-date <YYYY-MM-DD>')
-    .option('--end-date <YYYY-MM-DD>')
-    .action(async function planAction(opts) {
-      try {
-        const globals = getGlobalOptions(this);
-        const startDate = assertIsoDate(opts.startDate, 'start-date');
-        const endDate = opts.endDate ? assertIsoDate(opts.endDate, 'end-date') : undefined;
-        assertWindow(startDate, endDate);
+      const store = await loadStore();
+      const { found, foundOnDifferentProfile } = findByIdInScope(
+        store,
+        globals.profile,
+        includeAllProfiles,
+        String(opts.id),
+      );
+      const existing = assertFoundExperiment(
+        String(opts.id),
+        globals.profile,
+        includeAllProfiles,
+        found,
+        foundOnDifferentProfile,
+      );
 
-        const item = await createExperiment({
-          name: String(opts.name),
-          behavior: String(opts.behavior),
-          startDate,
-          endDate,
-          profile: globals.profile,
-        });
-        const todayIso = dateToIso(new Date());
+      let updated: (Experiment & { profile: string }) | null = null;
 
-        printData(this, {
-          ...withDerivedStatus(item as Experiment & { profile: string }, todayIso),
-          ...sourceMeta(),
-        });
-      } catch (err) {
-        printError(this, err);
+      store.experiments = store.experiments.map((raw) => {
+        const normalized = normalizeExperimentProfile(raw);
+        if (normalized.id !== existing.id) return raw;
+        if (!includeAllProfiles && normalized.profile !== globals.profile) return raw;
+
+        const next: Experiment & { profile: string } = {
+          ...normalized,
+          context: mergeExperimentContext(normalized.context, contextUpdate),
+        };
+        updated = next;
+        return next;
+      });
+
+      if (!updated) {
+        throw usageError('Experiment update failed unexpectedly', { id: opts.id });
       }
-    });
+
+      await saveStore(store);
+      const todayIso = dateToIso(new Date());
+
+      printData(this, {
+        asOfDate: todayIso,
+        scope: {
+          profile: globals.profile,
+          allProfiles: includeAllProfiles,
+        },
+        ...sourceMeta(),
+        experiment: withDerivedStatus(updated, todayIso),
+      });
+    } catch (err) {
+      printError(this, err);
+    }
+  });
 
   experiment
     .command('list')
@@ -206,24 +347,26 @@ export const registerExperimentCommands = (program: Command): void => {
         const experiments = scoped.map((item) => withDerivedStatus(item, todayIso));
 
         if (opts.id) {
-          const found = experiments.find((item) => item.id === opts.id);
-          if (!found) {
-            const allExperiments = getScopedExperiments(store.experiments, globals.profile, true);
-            const foundOnDifferentProfile = allExperiments.find((item) => item.id === opts.id);
-            if (foundOnDifferentProfile && !includeAllProfiles) {
-              throw usageError('Experiment exists on a different profile', {
-                id: opts.id,
-                activeProfile: globals.profile,
-                experimentProfile: foundOnDifferentProfile.profile,
-                hint: 'Use --all-profiles to query across profiles, or run with --profile matching the experiment.',
-              });
-            }
-            throw usageError('Experiment not found', { id: opts.id });
-          }
-          if (statusFilter && found.status !== statusFilter) {
+          const { found, foundOnDifferentProfile } = findByIdInScope(
+            store,
+            globals.profile,
+            includeAllProfiles,
+            String(opts.id),
+          );
+          const resolved = assertFoundExperiment(
+            String(opts.id),
+            globals.profile,
+            includeAllProfiles,
+            found,
+            foundOnDifferentProfile,
+          );
+
+          const foundWithStatus = withDerivedStatus(resolved, todayIso);
+
+          if (statusFilter && foundWithStatus.status !== statusFilter) {
             throw usageError('Experiment does not match status filter', {
               id: opts.id,
-              status: found.status,
+              status: foundWithStatus.status,
               expectedStatus: statusFilter,
             });
           }
@@ -235,8 +378,8 @@ export const registerExperimentCommands = (program: Command): void => {
               allProfiles: includeAllProfiles,
             },
             ...sourceMeta(),
-            experiment: found,
-            window: getExperimentWindowDetails(found, todayIso),
+            experiment: foundWithStatus,
+            window: getExperimentWindowDetails(foundWithStatus, todayIso),
           });
           return;
         }
@@ -283,21 +426,21 @@ export const registerExperimentCommands = (program: Command): void => {
         }
 
         const store = await loadStore();
-        const scoped = getScopedExperiments(store.experiments, globals.profile, includeAllProfiles);
-        const exp = scoped.find((x) => x.id === opts.id);
-        if (!exp) {
-          const allExperiments = getScopedExperiments(store.experiments, globals.profile, true);
-          const foundOnDifferentProfile = allExperiments.find((item) => item.id === opts.id);
-          if (foundOnDifferentProfile && !includeAllProfiles) {
-            throw usageError('Experiment exists on a different profile', {
-              id: opts.id,
-              activeProfile: globals.profile,
-              experimentProfile: foundOnDifferentProfile.profile,
-              hint: 'Use --all-profiles to query across profiles, or run with --profile matching the experiment.',
-            });
-          }
-          throw usageError('Experiment not found', { id: opts.id });
-        }
+        const { found, foundOnDifferentProfile } = findByIdInScope(
+          store,
+          globals.profile,
+          includeAllProfiles,
+          String(opts.id),
+        );
+
+        const exp = assertFoundExperiment(
+          String(opts.id),
+          globals.profile,
+          includeAllProfiles,
+          found,
+          foundOnDifferentProfile,
+        );
+
         const todayIso = dateToIso(new Date());
 
         const client = new WhoopApiClient(globals.profile);

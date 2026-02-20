@@ -89,8 +89,10 @@ whoop activity list --days 30 --json | jq '.data.records | map(select(.sport_id 
 ## Experiment protocol (agent-required)
 
 - Canonical state: `~/.whoop-cli/experiments.json` only.
-- Plan experiments with:
-  - `whoop experiment plan --name ... --behavior ... --start-date YYYY-MM-DD [--end-date YYYY-MM-DD] --json --pretty`
+- Plan experiments with context at creation time:
+  - `whoop experiment plan --name ... --behavior ... --start-date YYYY-MM-DD [--end-date YYYY-MM-DD] --description ... --why ... --hypothesis ... --success-criteria ... --protocol ... --json --pretty`
+- Update context without creating duplicate state:
+  - `whoop experiment context --id ... [--description ... --why ... --hypothesis ... --success-criteria ... --protocol ...] --json --pretty`
 - Check lifecycle/status with:
   - `whoop experiment status [--status planned|running|completed] [--id ...] --json --pretty`
 - Evaluate outcomes with:
