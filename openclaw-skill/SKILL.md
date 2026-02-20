@@ -64,6 +64,13 @@ whoop openclaw install-skill --force
 - Trends:
   - `whoop sleep trend --days 30 --json --pretty`
   - `whoop workout trend --days 14 --json --pretty`
+  - For training-only reporting, prefer `whoop workout trend --days 14 --exclude-generic-activity --json --pretty`
+
+### Workout interpretation guardrail (important)
+
+- WHOOP auto-detected generic `activity` rows are often unlabeled movement (for example housework or incidental activity), not necessarily intentional workouts.
+- Do not treat generic `activity` as confirmed training volume by default.
+- For coaching/training recommendations, prefer workout commands with `--exclude-generic-activity` and call out the filtered vs total counts.
 - Export:
   - `whoop sync pull --start YYYY-MM-DD --end YYYY-MM-DD --out ./whoop.jsonl --json --pretty`
 
