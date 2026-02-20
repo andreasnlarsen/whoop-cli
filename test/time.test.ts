@@ -9,6 +9,7 @@ test('isIsoDate accepts yyyy-mm-dd', () => {
 
 test('assertIsoDate throws on invalid', () => {
   assert.throws(() => assertIsoDate('2026/02/19'));
+  assert.throws(() => assertIsoDate('2026-02-30'));
 });
 
 test('parseDateRange passes explicit bounds', () => {

@@ -86,6 +86,17 @@ whoop activity list --days 30 --json | jq '.data.records | map(select(.sport_id 
 - Export:
   - `whoop sync pull --start YYYY-MM-DD --end YYYY-MM-DD --out ./whoop.jsonl --json --pretty`
 
+## Experiment protocol (agent-required)
+
+- Canonical state: `~/.whoop-cli/experiments.json` only.
+- Plan experiments with:
+  - `whoop experiment plan --name ... --behavior ... --start-date YYYY-MM-DD [--end-date YYYY-MM-DD] --json --pretty`
+- Check lifecycle/status with:
+  - `whoop experiment status [--status planned|running|completed] [--id ...] --json --pretty`
+- Evaluate outcomes with:
+  - `whoop experiment report --id ... --json --pretty`
+- Avoid duplicating experiment state into other files unless the user explicitly asks for separate notes.
+
 ## Safety
 
 - Never print client secrets or raw tokens.
