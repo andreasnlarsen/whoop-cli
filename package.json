@@ -1,6 +1,6 @@
 {
   "name": "@andreasnlarsen/whoop-cli",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Open-source WHOOP CLI for humans and agents",
   "type": "module",
   "license": "MIT",
