@@ -95,6 +95,9 @@ whoop activity list --days 30 --json | jq '.data.records | map(select(.sport_id 
   - `whoop experiment status [--status planned|running|completed] [--id ...] --json --pretty`
 - Evaluate outcomes with:
   - `whoop experiment report --id ... --json --pretty`
+- Profile scope is strict by default (active `--profile` only).
+  - Use `--all-profiles` only when cross-profile visibility is explicitly needed.
+- Prefer output field `sourceOfTruth` (path to canonical state file); `experimentsFile` is kept as compatibility alias.
 - Avoid duplicating experiment state into other files unless the user explicitly asks for separate notes.
 
 ## Safety
