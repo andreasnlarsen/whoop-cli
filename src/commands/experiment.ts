@@ -13,6 +13,7 @@ import {
   type ExperimentStatus,
   withDerivedStatus,
 } from '../util/experiment-status.js';
+import { filterExperimentsByProfile } from '../util/experiment-scope.js';
 
 interface Experiment {
   id: string;
@@ -21,6 +22,7 @@ interface Experiment {
   startDate: string;
   endDate?: string;
   createdAt: string;
+  profile?: string;
 }
 
 interface ExperimentStore {
@@ -39,6 +41,14 @@ const saveStore = async (store: ExperimentStore): Promise<void> => {
 const makeId = (): string => Math.random().toString(36).slice(2, 10);
 const STATUS_VALUES: ExperimentStatus[] = ['planned', 'running', 'completed'];
 const DAY_MS = 24 * 60 * 60 * 1000;
+
+const sourceMeta = (): { sourceOfTruth: string; experimentsFile: string } => {
+  const sourceOfTruth = experimentsPath();
+  return {
+    sourceOfTruth,
+    experimentsFile: sourceOfTruth,
+  };
+};
 
 const assertStatus = (value: string | undefined): ExperimentStatus | undefined => {
   if (!value) return undefined;
@@ -59,6 +69,7 @@ const createExperiment = async (input: {
   behavior: string;
   startDate: string;
   endDate?: string;
+  profile: string;
 }): Promise<Experiment> => {
   const store = await loadStore();
   const item: Experiment = {
@@ -68,12 +79,19 @@ const createExperiment = async (input: {
     startDate: input.startDate,
     endDate: input.endDate,
     createdAt: new Date().toISOString(),
+    profile: input.profile,
   };
 
   store.experiments.unshift(item);
   await saveStore(store);
   return item;
 };
+
+const getScopedExperiments = (
+  experiments: Experiment[],
+  profile: string,
+  allProfiles: boolean,
+): Array<Experiment & { profile: string }> => filterExperimentsByProfile(experiments, profile, allProfiles);
 
 export const registerExperimentCommands = (program: Command): void => {
   const experiment = program.command('experiment').description('Behavior experiment tracking');
@@ -87,19 +105,24 @@ export const registerExperimentCommands = (program: Command): void => {
     .option('--end-date <YYYY-MM-DD>')
     .action(async function startAction(opts) {
       try {
+        const globals = getGlobalOptions(this);
         const startDate = opts.startDate ? assertIsoDate(opts.startDate, 'start-date') : daysAgoIso(0);
         const endDate = opts.endDate ? assertIsoDate(opts.endDate, 'end-date') : undefined;
         assertWindow(startDate, endDate);
-        const experimentsFile = experimentsPath();
+
         const item = await createExperiment({
           name: String(opts.name),
           behavior: String(opts.behavior),
           startDate,
           endDate,
+          profile: globals.profile,
         });
         const todayIso = dateToIso(new Date());
 
-        printData(this, { ...withDerivedStatus(item, todayIso), experimentsFile });
+        printData(this, {
+          ...withDerivedStatus(item as Experiment & { profile: string }, todayIso),
+          ...sourceMeta(),
+        });
       } catch (err) {
         printError(this, err);
       }
@@ -114,19 +137,24 @@ export const registerExperimentCommands = (program: Command): void => {
     .option('--end-date <YYYY-MM-DD>')
     .action(async function planAction(opts) {
       try {
+        const globals = getGlobalOptions(this);
         const startDate = assertIsoDate(opts.startDate, 'start-date');
         const endDate = opts.endDate ? assertIsoDate(opts.endDate, 'end-date') : undefined;
         assertWindow(startDate, endDate);
-        const experimentsFile = experimentsPath();
+
         const item = await createExperiment({
           name: String(opts.name),
           behavior: String(opts.behavior),
           startDate,
           endDate,
+          profile: globals.profile,
         });
         const todayIso = dateToIso(new Date());
 
-        printData(this, { ...withDerivedStatus(item, todayIso), experimentsFile });
+        printData(this, {
+          ...withDerivedStatus(item as Experiment & { profile: string }, todayIso),
+          ...sourceMeta(),
+        });
       } catch (err) {
         printError(this, err);
       }
@@ -134,16 +162,26 @@ export const registerExperimentCommands = (program: Command): void => {
 
   experiment
     .command('list')
-    .description('List saved experiments')
-    .action(async function listAction() {
+    .description('List saved experiments for active profile by default')
+    .option('--all-profiles', 'include experiments from all profiles')
+    .action(async function listAction(opts) {
       try {
+        const globals = getGlobalOptions(this);
+        const includeAllProfiles = Boolean(opts.allProfiles);
         const store = await loadStore();
         const todayIso = dateToIso(new Date());
-        const experiments = store.experiments.map((item) => withDerivedStatus(item, todayIso));
+
+        const scoped = getScopedExperiments(store.experiments, globals.profile, includeAllProfiles);
+        const experiments = scoped.map((item) => withDerivedStatus(item, todayIso));
+
         printData(this, {
           count: experiments.length,
           asOfDate: todayIso,
-          experimentsFile: experimentsPath(),
+          scope: {
+            profile: globals.profile,
+            allProfiles: includeAllProfiles,
+          },
+          ...sourceMeta(),
           experiments,
         });
       } catch (err) {
@@ -156,16 +194,30 @@ export const registerExperimentCommands = (program: Command): void => {
     .description('Summarize planned, running, and completed experiments')
     .option('--status <status>', 'Filter by derived status: planned|running|completed')
     .option('--id <experimentId>', 'Show detailed status for one experiment')
+    .option('--all-profiles', 'include experiments from all profiles')
     .action(async function statusAction(opts) {
       try {
+        const globals = getGlobalOptions(this);
+        const includeAllProfiles = Boolean(opts.allProfiles);
         const store = await loadStore();
         const todayIso = dateToIso(new Date());
         const statusFilter = assertStatus(opts.status);
-        const experiments = store.experiments.map((item) => withDerivedStatus(item, todayIso));
+        const scoped = getScopedExperiments(store.experiments, globals.profile, includeAllProfiles);
+        const experiments = scoped.map((item) => withDerivedStatus(item, todayIso));
 
         if (opts.id) {
           const found = experiments.find((item) => item.id === opts.id);
           if (!found) {
+            const allExperiments = getScopedExperiments(store.experiments, globals.profile, true);
+            const foundOnDifferentProfile = allExperiments.find((item) => item.id === opts.id);
+            if (foundOnDifferentProfile && !includeAllProfiles) {
+              throw usageError('Experiment exists on a different profile', {
+                id: opts.id,
+                activeProfile: globals.profile,
+                experimentProfile: foundOnDifferentProfile.profile,
+                hint: 'Use --all-profiles to query across profiles, or run with --profile matching the experiment.',
+              });
+            }
             throw usageError('Experiment not found', { id: opts.id });
           }
           if (statusFilter && found.status !== statusFilter) {
@@ -177,8 +229,12 @@ export const registerExperimentCommands = (program: Command): void => {
           }
 
           printData(this, {
-            experimentsFile: experimentsPath(),
             asOfDate: todayIso,
+            scope: {
+              profile: globals.profile,
+              allProfiles: includeAllProfiles,
+            },
+            ...sourceMeta(),
             experiment: found,
             window: getExperimentWindowDetails(found, todayIso),
           });
@@ -195,11 +251,15 @@ export const registerExperimentCommands = (program: Command): void => {
         );
 
         printData(this, {
-          experimentsFile: experimentsPath(),
           asOfDate: todayIso,
           count: filtered.length,
           counts: { ...counts, total: experiments.length },
           filters: { status: statusFilter ?? null },
+          scope: {
+            profile: globals.profile,
+            allProfiles: includeAllProfiles,
+          },
+          ...sourceMeta(),
           experiments: filtered,
         });
       } catch (err) {
@@ -212,17 +272,30 @@ export const registerExperimentCommands = (program: Command): void => {
     .description('Generate baseline-vs-experiment recovery report')
     .requiredOption('--id <experimentId>')
     .option('--baseline-days <n>', 'default 14', '14')
+    .option('--all-profiles', 'include experiments from all profiles')
     .action(async function reportAction(opts) {
       try {
         const globals = getGlobalOptions(this);
+        const includeAllProfiles = Boolean(opts.allProfiles);
         const baselineDays = Number(opts.baselineDays ?? 14);
         if (Number.isNaN(baselineDays) || baselineDays <= 0) {
           throw usageError('baseline-days must be > 0');
         }
 
         const store = await loadStore();
-        const exp = store.experiments.find((x) => x.id === opts.id);
+        const scoped = getScopedExperiments(store.experiments, globals.profile, includeAllProfiles);
+        const exp = scoped.find((x) => x.id === opts.id);
         if (!exp) {
+          const allExperiments = getScopedExperiments(store.experiments, globals.profile, true);
+          const foundOnDifferentProfile = allExperiments.find((item) => item.id === opts.id);
+          if (foundOnDifferentProfile && !includeAllProfiles) {
+            throw usageError('Experiment exists on a different profile', {
+              id: opts.id,
+              activeProfile: globals.profile,
+              experimentProfile: foundOnDifferentProfile.profile,
+              hint: 'Use --all-profiles to query across profiles, or run with --profile matching the experiment.',
+            });
+          }
           throw usageError('Experiment not found', { id: opts.id });
         }
         const todayIso = dateToIso(new Date());
@@ -242,7 +315,7 @@ export const registerExperimentCommands = (program: Command): void => {
         const periodEndIso = exp.endDate ?? todayIso;
         const expEnd = new Date(`${periodEndIso}T23:59:59Z`).getTime();
 
-        const baselineStart = expStart - baselineDays * 24 * 60 * 60 * 1000;
+        const baselineStart = expStart - baselineDays * DAY_MS;
         const baselineEnd = expStart - 1;
         const baselineStartIso = dateToIso(new Date(baselineStart));
         const baselineEndIso = dateToIso(new Date(expStart - DAY_MS));
@@ -266,8 +339,12 @@ export const registerExperimentCommands = (program: Command): void => {
         const delta = baselineAvg !== null && experimentAvg !== null ? experimentAvg - baselineAvg : null;
 
         printData(this, {
-          experimentsFile: experimentsPath(),
           asOfDate: todayIso,
+          scope: {
+            profile: globals.profile,
+            allProfiles: includeAllProfiles,
+          },
+          ...sourceMeta(),
           experiment: withDerivedStatus(exp, todayIso),
           baselineDays,
           baselineWindow: {

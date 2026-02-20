@@ -293,8 +293,12 @@ Recommended single-source workflow:
 2. `whoop experiment status ...`
 3. `whoop experiment report --id ...`
 
+Profile scope behavior:
+- Experiments are scoped to active `--profile` by default.
+- Use `--all-profiles` on `experiment list|status|report` when you explicitly want cross-profile views.
+
 `~/.whoop-cli/experiments.json` is the canonical experiment state. Agent outputs include
-`experimentsFile` so automations can verify they are reading from that file.
+`sourceOfTruth` (and `experimentsFile` compatibility alias) so automations can verify source path.
 
 ---
 
