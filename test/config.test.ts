@@ -1,15 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { normalizeBaseUrl, sanitizeProfileName, whoopHome } from '../src/util/config.js';
-
-test('whoopHome uses WHOOP_HOME when provided', () => {
-  assert.equal(
-    whoopHome({
-      WHOOP_HOME: '/srv/whoop-cli',
-    }),
-    '/srv/whoop-cli',
-  );
-});
+import { normalizeBaseUrl, sanitizeProfileName } from '../src/util/config.js';
 
 test('sanitizeProfileName accepts simple profile names', () => {
   assert.equal(sanitizeProfileName('default_1-prod'), 'default_1-prod');

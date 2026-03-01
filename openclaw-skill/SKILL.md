@@ -32,7 +32,6 @@ Use the installed `whoop` command.
 - Do not run `whoop auth login` unless the user explicitly asks for login help.
 - Access and refresh tokens are stored locally at `~/.whoop-cli/profiles/<profile>.json` by the CLI.
 - `clientSecret` should come from `WHOOP_CLIENT_SECRET` and is not intended to be persisted after login.
-- For server installs, prefer setting `WHOOP_HOME` so the CLI state lives in a dedicated directory.
 
 ## Install / bootstrap
 

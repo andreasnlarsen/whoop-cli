@@ -33,10 +33,7 @@ export const normalizeBaseUrl = (raw: string): string => {
   return `https://${ALLOWED_WHOOP_HOST}`;
 };
 
-export const whoopHome = (env: NodeJS.ProcessEnv = process.env): string => {
-  const override = env.WHOOP_HOME?.trim();
-  return override || join(homedir(), '.whoop-cli');
-};
+export const whoopHome = (): string => join(homedir(), '.whoop-cli');
 
 export const profilePath = (profile: string): string =>
   join(whoopHome(), 'profiles', `${sanitizeProfileName(profile)}.json`);

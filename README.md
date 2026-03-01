@@ -149,7 +149,6 @@ Set these once in your shell or `.env`:
 export WHOOP_CLIENT_ID="<CLIENT_ID>"
 export WHOOP_CLIENT_SECRET="<CLIENT_SECRET>"
 export WHOOP_REDIRECT_URI="<REDIRECT_URI>"
-export WHOOP_HOME="/srv/whoop-cli"
 ```
 
 Then run:
@@ -220,7 +219,6 @@ Then open the printed URL manually in your browser.
 
 - Access tokens and refresh tokens are stored in the local profile file.
 - `clientSecret` is intended to come from `WHOOP_CLIENT_SECRET` and is not persisted after login.
-- If you want the CLI data in a dedicated directory, set `WHOOP_HOME`.
 
 ---
 
