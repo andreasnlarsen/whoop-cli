@@ -37,8 +37,11 @@ There is **no managed/shared auth service** in this repo right now.
 - Package: `@andreasnlarsen/whoop-cli`
 - Releases are published via GitHub Actions trusted publishing (OIDC) with npm provenance.
 - This integration is unofficial and not affiliated with Whoop, Inc.
-- Never paste OAuth client secrets/tokens into chat. Run login locally:
-  - `whoop auth login --client-id ... --client-secret ... --redirect-uri ...`
+- Never paste OAuth client secrets/tokens into chat. For servers and agent setups, prefer environment variables:
+  - `export WHOOP_CLIENT_ID=...`
+  - `export WHOOP_CLIENT_SECRET=...`
+  - `export WHOOP_REDIRECT_URI=...`
+  - `whoop auth login`
 - Verify install quickly:
   - `npx -y @andreasnlarsen/whoop-cli --help`
   - `whoop auth status --json`
@@ -138,6 +141,27 @@ Then copy these 3 values from WHOOP dashboard:
 
 ## 3) Login
 
+### Recommended for servers / OpenClaw
+
+Set these once in your shell or `.env`:
+
+```bash
+export WHOOP_CLIENT_ID="<CLIENT_ID>"
+export WHOOP_CLIENT_SECRET="<CLIENT_SECRET>"
+export WHOOP_REDIRECT_URI="<REDIRECT_URI>"
+export WHOOP_HOME="/srv/whoop-cli"
+```
+
+Then run:
+
+```bash
+whoop auth login
+```
+
+This keeps the client secret in environment variables instead of writing it into the saved profile file.
+
+### Alternative: one-off local login
+
 ```bash
 whoop auth login \
   --client-id "<CLIENT_ID>" \
@@ -192,6 +216,12 @@ whoop auth login --no-open
 
 Then open the printed URL manually in your browser.
 
+### Where credentials are stored
+
+- Access tokens and refresh tokens are stored in the local profile file.
+- `clientSecret` is intended to come from `WHOOP_CLIENT_SECRET` and is not persisted after login.
+- If you want the CLI data in a dedicated directory, set `WHOOP_HOME`.
+
 ---
 
 ## For non-technical users
@@ -218,7 +248,7 @@ whoop day-brief --json --pretty
 whoop auth status --json
 ```
 
-2. If not authenticated, run `whoop auth login ...`
+2. If not authenticated, make sure `WHOOP_CLIENT_ID`, `WHOOP_CLIENT_SECRET`, and `WHOOP_REDIRECT_URI` are set, then run `whoop auth login`
 3. Validate with:
 
 ```bash

@@ -30,7 +30,9 @@ Use the installed `whoop` command.
 - For first-time auth, the user should run login **locally on their own shell**.
 - Prefer read-only operational commands in agent flows (`summary`, `day-brief`, `health`, `trend`, `sync pull`).
 - Do not run `whoop auth login` unless the user explicitly asks for login help.
-- Tokens are stored locally at `~/.whoop-cli/profiles/<profile>.json` by the CLI.
+- Access and refresh tokens are stored locally at `~/.whoop-cli/profiles/<profile>.json` by the CLI.
+- `clientSecret` should come from `WHOOP_CLIENT_SECRET` and is not intended to be persisted after login.
+- For server installs, prefer setting `WHOOP_HOME` so the CLI state lives in a dedicated directory.
 
 ## Install / bootstrap
 
@@ -50,7 +52,8 @@ whoop openclaw install-skill --force
 
 1. `whoop auth status --json`
 2. If unauthenticated, ask the user to run local login:
-   - `whoop auth login --client-id ... --client-secret ... --redirect-uri ...`
+   - ensure `WHOOP_CLIENT_ID`, `WHOOP_CLIENT_SECRET`, and `WHOOP_REDIRECT_URI` are set
+   - then run `whoop auth login`
 3. Validate:
    - `whoop day-brief --json --pretty`
 
