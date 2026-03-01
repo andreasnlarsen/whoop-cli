@@ -70,7 +70,7 @@ export const registerAuthCommands = (program: Command): void => {
     .option('--client-secret <secret>')
     .option('--redirect-uri <url>')
     .option('--scopes <scopes>', 'space/comma separated scopes')
-    .option('--code <code>', 'authorization code (skip prompt)')
+    .option('--code <url>', 'full redirect URL (skip prompt; code-only disabled for safety)')
     .option('--state <state>', 'state override')
     .option('--no-open', 'do not attempt to open browser')
     .action(async function loginAction(opts) {
@@ -100,18 +100,27 @@ export const registerAuthCommands = (program: Command): void => {
           openAttempted = await tryOpenBrowser(authUrl);
         }
 
-        let code = opts.code as string | undefined;
-        if (!code) {
+        let code: string | undefined;
+        if (opts.code) {
+          const parsed = parseAuthInput(String(opts.code));
+          code = parsed.code;
+          if (parsed.state !== state) {
+            throw usageError('OAuth state mismatch. Retry login flow for security.', {
+              expected: state,
+              received: parsed.state,
+            });
+          }
+        } else {
           if (!globals.json) {
             console.log('Open this URL and authorize access:');
             console.log(authUrl);
             console.log(openAttempted ? '(attempted browser open)' : '(could not auto-open browser; copy URL manually)');
           }
 
-          const input = await ask('Paste redirect URL (or authorization code): ');
+          const input = await ask('Paste redirect URL: ');
           const parsed = parseAuthInput(input);
           code = parsed.code;
-          if (parsed.state && parsed.state !== state) {
+          if (parsed.state !== state) {
             throw usageError('OAuth state mismatch. Retry login flow for security.', {
               expected: state,
               received: parsed.state,

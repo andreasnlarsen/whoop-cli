@@ -111,7 +111,7 @@ export const refreshAuthToken = async (
 
 export interface ParsedAuthInput {
   code: string;
-  state?: string;
+  state: string;
 }
 
 export const parseAuthInput = (input: string): ParsedAuthInput => {
@@ -120,15 +120,20 @@ export const parseAuthInput = (input: string): ParsedAuthInput => {
     throw usageError('Empty authorization input');
   }
 
-  if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
-    const url = new URL(trimmed);
-    const code = url.searchParams.get('code');
-    const state = url.searchParams.get('state') ?? undefined;
-    if (!code) {
-      throw usageError('Redirect URL did not contain code parameter');
-    }
-    return { code, state };
+  if (!trimmed.startsWith('http://') && !trimmed.startsWith('https://')) {
+    throw usageError('Paste the full redirect URL so OAuth state can be verified.');
   }
 
-  return { code: trimmed };
+  const url = new URL(trimmed);
+  const code = url.searchParams.get('code');
+  const state = url.searchParams.get('state');
+  if (!code) {
+    throw usageError('Redirect URL did not contain code parameter');
+  }
+
+  if (!state) {
+    throw usageError('Redirect URL did not contain state parameter');
+  }
+
+  return { code, state };
 };

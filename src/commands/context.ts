@@ -1,6 +1,6 @@
 import type { Command } from 'commander';
-import { DEFAULT_BASE_URL } from '../util/config.js';
-import { fromError, ok, stringifyEnvelope } from '../output/envelope.js';
+import { DEFAULT_BASE_URL, normalizeBaseUrl, sanitizeProfileName } from '../util/config.js';
+import { fail, ok, stringifyEnvelope } from '../output/envelope.js';
 import { normalizeError } from '../http/errors.js';
 
 export interface GlobalOptions {
@@ -23,10 +23,30 @@ export const getGlobalOptions = (command: Command): GlobalOptions => {
   return {
     json: Boolean(opts.json),
     pretty: Boolean(opts.pretty),
-    profile: opts.profile ?? 'default',
-    baseUrl: opts.baseUrl ?? DEFAULT_BASE_URL,
+    profile: sanitizeProfileName(opts.profile ?? 'default'),
+    baseUrl: normalizeBaseUrl(opts.baseUrl ?? DEFAULT_BASE_URL),
     timeoutMs: Number(opts.timeoutMs ?? '10000'),
   };
+};
+
+const redactDetails = (value: unknown): unknown => {
+  if (Array.isArray(value)) {
+    return value.map((item) => redactDetails(item));
+  }
+
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(
+      Object.entries(value).map(([key, item]) => {
+        if (/(secret|token|authorization|cookie)/i.test(key)) {
+          return [key, '[REDACTED]'];
+        }
+
+        return [key, redactDetails(item)];
+      }),
+    );
+  }
+
+  return value;
 };
 
 export const printData = (command: Command, data: unknown): void => {
@@ -45,15 +65,25 @@ export const printData = (command: Command, data: unknown): void => {
 };
 
 export const printError = (command: Command, err: unknown): never => {
-  const globals = getGlobalOptions(command);
-  const normalized = normalizeError(err);
+  let json = false;
+  let pretty = false;
+  try {
+    const globals = getGlobalOptions(command);
+    json = globals.json;
+    pretty = globals.pretty;
+  } catch {
+    // Fall back to plain-text output when global option parsing is the failing path.
+  }
 
-  if (globals.json) {
-    console.log(stringifyEnvelope(fromError(normalized), globals.pretty));
+  const normalized = normalizeError(err);
+  const details = redactDetails(normalized.details);
+
+  if (json) {
+    console.log(stringifyEnvelope(fail(normalized.code, normalized.message, details), pretty));
   } else {
     console.error(`${normalized.code}: ${normalized.message}`);
-    if (normalized.details) {
-      console.error(JSON.stringify(normalized.details, null, 2));
+    if (details) {
+      console.error(JSON.stringify(details, null, 2));
     }
   }
 

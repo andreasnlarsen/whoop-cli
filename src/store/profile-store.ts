@@ -1,4 +1,4 @@
-import { profilePath } from '../util/config.js';
+import { normalizeBaseUrl, profilePath } from '../util/config.js';
 import { readJsonFile, writeJsonFileSecure } from '../util/fs.js';
 
 export interface TokenSet {
@@ -21,16 +21,36 @@ export interface WhoopProfile {
   tokens?: TokenSet;
 }
 
+export const profileWithRuntimeOverrides = (
+  profile: WhoopProfile,
+  env: NodeJS.ProcessEnv = process.env,
+): WhoopProfile => ({
+  ...profile,
+  clientId: env.WHOOP_CLIENT_ID ?? profile.clientId,
+  clientSecret: env.WHOOP_CLIENT_SECRET ?? profile.clientSecret,
+  redirectUri: env.WHOOP_REDIRECT_URI ?? profile.redirectUri,
+  baseUrl: normalizeBaseUrl(env.WHOOP_BASE_URL ?? profile.baseUrl),
+});
+
+export const profileForStorage = (name: string, profile: WhoopProfile): WhoopProfile => ({
+  ...profile,
+  profileName: name,
+  clientSecret: '',
+  baseUrl: normalizeBaseUrl(profile.baseUrl),
+  updatedAt: new Date().toISOString(),
+});
+
 export const loadProfile = async (name: string): Promise<WhoopProfile | null> => {
-  return readJsonFile<WhoopProfile>(profilePath(name));
+  const profile = await readJsonFile<WhoopProfile>(profilePath(name));
+  if (!profile) {
+    return null;
+  }
+
+  return profileWithRuntimeOverrides(profile);
 };
 
 export const saveProfile = async (name: string, profile: WhoopProfile): Promise<void> => {
-  await writeJsonFileSecure(profilePath(name), {
-    ...profile,
-    profileName: name,
-    updatedAt: new Date().toISOString(),
-  });
+  await writeJsonFileSecure(profilePath(name), profileForStorage(name, profile));
 };
 
 export const clearProfileTokens = async (name: string): Promise<void> => {
