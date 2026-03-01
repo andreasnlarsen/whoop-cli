@@ -4,6 +4,13 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
+WHOAMI_OUT="$(mktemp /tmp/npm-whoami.XXXXXX.out)"
+WHOAMI_ERR="$(mktemp /tmp/npm-whoami.XXXXXX.err)"
+VER_OUT="$(mktemp /tmp/npm-ver.XXXXXX.out)"
+VER_ERR="$(mktemp /tmp/npm-ver.XXXXXX.err)"
+NPX_HELP_OUT="$(mktemp /tmp/npm-npx-help.XXXXXX.out)"
+trap 'rm -f "$WHOAMI_OUT" "$WHOAMI_ERR" "$VER_OUT" "$VER_ERR" "$NPX_HELP_OUT"' EXIT
+
 pkg_name=$(node -p "require('./package.json').name")
 pkg_version=$(node -p "require('./package.json').version")
 
@@ -22,18 +29,18 @@ npm test
 npm run build
 
 echo "==> Verifying npm auth"
-if ! npm whoami >/tmp/npm_whoami.out 2>/tmp/npm_whoami.err; then
+if ! npm whoami >"$WHOAMI_OUT" 2>"$WHOAMI_ERR"; then
   echo "ERROR: npm auth missing/expired. Run: npm login"
-  cat /tmp/npm_whoami.err || true
+  cat "$WHOAMI_ERR" || true
   exit 1
 fi
-npm_user=$(cat /tmp/npm_whoami.out)
+npm_user=$(cat "$WHOAMI_OUT")
 echo "Authenticated as: $npm_user"
 
 echo "==> Checking if version already exists"
-if npm view "$pkg_name@$pkg_version" version >/tmp/npm_ver.out 2>/tmp/npm_ver.err; then
+if npm view "$pkg_name@$pkg_version" version >"$VER_OUT" 2>"$VER_ERR"; then
   echo "ERROR: Version already published: $pkg_name@$pkg_version"
-  cat /tmp/npm_ver.out
+  cat "$VER_OUT"
   exit 1
 fi
 
@@ -47,7 +54,7 @@ echo "==> Verifying registry"
 npm view "$pkg_name" version dist-tags.latest
 
 echo "==> Smoke tests"
-npx -y "$pkg_name" --help >/tmp/npm_npx_help.out
-head -n 8 /tmp/npm_npx_help.out
+npx -y "$pkg_name" --help >"$NPX_HELP_OUT"
+head -n 8 "$NPX_HELP_OUT"
 
 echo "SUCCESS: Published $pkg_name@$pkg_version"
