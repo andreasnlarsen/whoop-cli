@@ -20,6 +20,8 @@ export const askHidden = async (question: string): Promise<string> => {
   }
 
   return new Promise((resolve) => {
+    output.write(question);
+
     const rl = createCallbackInterface({ input, output, terminal: true });
     const muted = rl as typeof rl & {
       _writeToOutput?: (value: string) => void;
@@ -34,7 +36,6 @@ export const askHidden = async (question: string): Promise<string> => {
       }
     };
 
-    output.write(question);
     rl.question('', (answer) => {
       muted.stdoutMuted = false;
       rl.close();
