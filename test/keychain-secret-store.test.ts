@@ -2,12 +2,12 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   createKeychainProfileSecretStore,
-  type SecurityCommandRunner,
+  type KeychainCommandRunner,
 } from '../src/store/keychain-secret-store.js';
 
-test('stores secrets through Keychain prompt stdin instead of command arguments', async () => {
+test('stores secrets through the Swift Keychain helper without secret arguments', async () => {
   const calls: { args: string[]; input?: string }[] = [];
-  const runCommand: SecurityCommandRunner = async (args, input) => {
+  const runCommand: KeychainCommandRunner = async (args, input) => {
     calls.push({ args, input });
     return { stdout: '', stderr: '' };
   };
@@ -18,24 +18,21 @@ test('stores secrets through Keychain prompt stdin instead of command arguments'
   assert.deepEqual(calls, [
     {
       args: [
-        'add-generic-password',
-        '-a',
-        'default:clientSecret',
-        '-s',
+        'set',
         'whoop-cli',
-        '-U',
-        '-w',
+        'default:clientSecret',
       ],
-      input: 'super-secret\nsuper-secret\n',
+      input: 'super-secret',
     },
   ]);
   assert.equal(calls[0].args.includes('super-secret'), false);
-  assert.equal(calls[0].args.at(-1), '-w');
+  assert.equal(calls[0].args.includes('-w'), false);
+  assert.equal(calls[0].args.includes('-X'), false);
 });
 
-test('reads a stored secret and trims the security command newline', async () => {
-  const runCommand: SecurityCommandRunner = async () => ({
-    stdout: 'stored-secret\n',
+test('reads a stored secret from the Swift Keychain helper', async () => {
+  const runCommand: KeychainCommandRunner = async () => ({
+    stdout: 'stored-secret',
     stderr: '',
   });
   const store = createKeychainProfileSecretStore(runCommand, 'darwin');
@@ -46,7 +43,7 @@ test('reads a stored secret and trims the security command newline', async () =>
 });
 
 test('returns undefined when a Keychain item is missing', async () => {
-  const runCommand: SecurityCommandRunner = async () => {
+  const runCommand: KeychainCommandRunner = async () => {
     const err = new Error('missing') as Error & { exitCode: number; stderr: string };
     err.exitCode = 44;
     err.stderr = 'The specified item could not be found in the keychain.';
@@ -58,8 +55,45 @@ test('returns undefined when a Keychain item is missing', async () => {
   await assert.doesNotReject(() => store.delete('default', 'refreshToken'));
 });
 
+test('reports macOS parameter errors as Keychain access failures', async () => {
+  const runCommand: KeychainCommandRunner = async () => {
+    const err = new Error('parameter error') as Error & { exitCode: number; stderr: string };
+    err.exitCode = 1;
+    err.stderr = 'keychain get failed: -50';
+    throw err;
+  };
+  const store = createKeychainProfileSecretStore(runCommand, 'darwin');
+
+  await assert.rejects(
+    () => store.get('default', 'refreshToken'),
+    /Keychain read was blocked or rejected/,
+  );
+  await assert.rejects(
+    () => store.delete('default', 'refreshToken'),
+    /Keychain delete was blocked or rejected/,
+  );
+});
+
+test('reports missing Apple Command Line Tools clearly', async () => {
+  const runCommand: KeychainCommandRunner = async () => {
+    const err = new Error('xcrun: error: invalid active developer path') as Error & {
+      exitCode: number;
+      stderr: string;
+    };
+    err.exitCode = 1;
+    err.stderr = 'xcrun: error: invalid active developer path, missing xcrun';
+    throw err;
+  };
+  const store = createKeychainProfileSecretStore(runCommand, 'darwin');
+
+  await assert.rejects(
+    () => store.set('default', 'clientSecret', 'super-secret'),
+    /requires Apple Command Line Tools/,
+  );
+});
+
 test('rejects Keychain access on non-macOS platforms', async () => {
-  const runCommand: SecurityCommandRunner = async () => ({ stdout: '', stderr: '' });
+  const runCommand: KeychainCommandRunner = async () => ({ stdout: '', stderr: '' });
   const store = createKeychainProfileSecretStore(runCommand, 'linux');
 
   await assert.rejects(
@@ -69,7 +103,7 @@ test('rejects Keychain access on non-macOS platforms', async () => {
 });
 
 test('rejects secrets containing newline characters', async () => {
-  const runCommand: SecurityCommandRunner = async () => ({ stdout: '', stderr: '' });
+  const runCommand: KeychainCommandRunner = async () => ({ stdout: '', stderr: '' });
   const store = createKeychainProfileSecretStore(runCommand, 'darwin');
 
   await assert.rejects(

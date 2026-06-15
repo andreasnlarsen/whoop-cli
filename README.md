@@ -150,7 +150,11 @@ whoop auth login
 
 For scripted setup only, you can provide `--client-id`, `--client-secret`, and `--redirect-uri`, or inject `WHOOP_CLIENT_ID`, `WHOOP_CLIENT_SECRET`, and `WHOOP_REDIRECT_URI` for that one command. Do not keep real secrets in shell startup files, checked-in `.env` files, or shared docs.
 
-The CLI stores the client secret and OAuth tokens in macOS Keychain under the `whoop-cli` service. The profile JSON on disk keeps only metadata.
+The CLI stores the client secret and OAuth tokens in macOS Keychain under the `whoop-cli` service. The profile JSON on disk keeps only metadata. Keychain access uses macOS Security APIs through `/usr/bin/swift` so secret values are passed over stdin instead of command-line arguments. If `/usr/bin/swift` is unavailable, install Apple Command Line Tools with `xcode-select --install`, then retry.
+
+If a sandboxed agent shell cannot access macOS Keychain, rerun the command from a normal Terminal or with unsandboxed execution. Do not switch to command-line secret arguments as a workaround.
+
+During a normal login, macOS should not ask for "password data for new item". If that prompt appears, stop and update/reinstall the CLI before trying again.
 
 Then test:
 

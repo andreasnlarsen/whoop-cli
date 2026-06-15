@@ -25,7 +25,11 @@ Use the installed `whoop` command.
 - For first-time auth, the user should run login **locally on their own shell**.
 - The CLI stores the WHOOP client secret, access token, and refresh token in macOS Keychain.
 - Profile JSON at `~/.whoop-cli/profiles/<profile>.json` stores non-secret metadata only.
+- Keychain access uses macOS Security APIs through `/usr/bin/swift`; do not replace this with command-line secret arguments.
+- If `/usr/bin/swift` is unavailable, tell the user to install Apple Command Line Tools with `xcode-select --install`.
+- If a sandboxed agent shell cannot access macOS Keychain, rerun the `whoop` command with normal user permissions; do not use secret-bearing command-line arguments as a fallback.
 - After login, regular read commands should not need env vars, 1Password prompts, passwords, or Touch ID.
+- If macOS asks for "password data for new item" during login, stop and update/reinstall `whoop`; the CLI should write Keychain items non-interactively.
 - Prefer read-only operational commands in agent flows (`summary`, `day-brief`, `health`, `trend`, `sync pull`).
 - Do not run `whoop auth login` unless the user explicitly asks for login help.
 

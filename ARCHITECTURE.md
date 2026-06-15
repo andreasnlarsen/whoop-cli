@@ -76,6 +76,9 @@ test/
 
 ### Token handling
 - macOS Keychain stores the WHOOP client secret, access token, and refresh token under service `whoop-cli`
+- Keychain access uses macOS Security APIs through `/usr/bin/swift`; write values are passed over stdin instead of command-line arguments
+- If `/usr/bin/swift` is unavailable, the CLI reports the missing Apple Command Line Tools prerequisite instead of falling back to command-line secret arguments
+- If a sandboxed agent process cannot access macOS Keychain, rerun the CLI with normal user permissions instead of falling back to secret-bearing command-line arguments
 - Profile JSON at `~/.whoop-cli/profiles/<name>.json` stores metadata only
 - Profile JSON writes are atomic + mode `0600`
 - Refresh runs proactively (expiry skew) and on-demand (`auth refresh`)
