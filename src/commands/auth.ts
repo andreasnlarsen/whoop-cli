@@ -5,9 +5,12 @@ import { buildAuthUrl, exchangeAuthCode, generateState, parseAuthInput } from '.
 import { getGlobalOptions, printData, printError } from './context.js';
 import {
   loadProfile,
+  loadProfileClientSecret,
   loadProfileMetadata,
   saveProfile,
   clearProfileTokens,
+  assertProfileSecretStorageSupported,
+  preflightProfileSecretStorage,
   type WhoopProfile,
 } from '../store/profile-store.js';
 import { tokenFromOAuth, refreshProfileToken } from '../auth/token-service.js';
@@ -55,6 +58,9 @@ const resolveClientConfig = async (
   let clientId = overrides.clientId ?? process.env.WHOOP_CLIENT_ID ?? existing?.clientId;
   let clientSecret = overrides.clientSecret ?? process.env.WHOOP_CLIENT_SECRET;
   let redirectUri = overrides.redirectUri ?? process.env.WHOOP_REDIRECT_URI ?? existing?.redirectUri;
+  if (!clientSecret && existing) {
+    clientSecret = await loadProfileClientSecret(profileName);
+  }
 
   if (interactive && canPrompt()) {
     clientId = clientId || (await ask('WHOOP client ID: ')).trim();
@@ -96,6 +102,8 @@ export const registerAuthCommands = (program: Command): void => {
     .action(async function loginAction(opts) {
       try {
         const globals = getGlobalOptions(this);
+        assertProfileSecretStorageSupported();
+        await preflightProfileSecretStorage(globals.profile);
         const profile = await resolveClientConfig(globals.profile, globals.baseUrl, {
           clientId: opts.clientId,
           clientSecret: opts.clientSecret,

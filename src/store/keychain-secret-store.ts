@@ -8,6 +8,8 @@ import { sanitizeProfileName } from '../util/config.js';
 export type ProfileSecretName = 'clientSecret' | 'accessToken' | 'refreshToken';
 
 export interface ProfileSecretStore {
+  assertSupported?: () => void;
+  preflightWrite?: (profileName: string) => Promise<void>;
   get(profileName: string, name: ProfileSecretName): Promise<string | undefined>;
   set(profileName: string, name: ProfileSecretName, value: string): Promise<void>;
   delete(profileName: string, name: ProfileSecretName): Promise<void>;
@@ -25,6 +27,7 @@ export type KeychainCommandRunner = (
 
 const KEYCHAIN_SERVICE = 'whoop-cli';
 const SWIFT_MODULE_CACHE_DIR = join(tmpdir(), 'whoop-cli-swift-module-cache');
+const PREFLIGHT_SECRET_VALUE = 'whoop-cli-keychain-preflight';
 
 const SWIFT_KEYCHAIN_HELPER_SOURCE = `
 import Foundation
@@ -120,6 +123,9 @@ default:
 const secretAccount = (profileName: string, name: ProfileSecretName): string =>
   `${sanitizeProfileName(profileName)}:${name}`;
 
+const preflightAccount = (profileName: string): string =>
+  `${sanitizeProfileName(profileName)}:preflight`;
+
 const isMissingItem = (err: unknown): boolean => {
   const candidate = err as { exitCode?: number; stderr?: string };
   return candidate.exitCode === 44 ||
@@ -211,6 +217,19 @@ export const createKeychainProfileSecretStore = (
   };
 
   return {
+    assertSupported,
+
+    async preflightWrite(profileName) {
+      assertSupported();
+      const account = preflightAccount(profileName);
+      try {
+        await runCommand(['set', KEYCHAIN_SERVICE, account], PREFLIGHT_SECRET_VALUE);
+        await runCommand(['delete', KEYCHAIN_SERVICE, account]);
+      } catch (err) {
+        throw keychainAccessError('write', err);
+      }
+    },
+
     async get(profileName, name) {
       assertSupported();
       try {

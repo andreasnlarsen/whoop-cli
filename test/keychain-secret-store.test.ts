@@ -30,6 +30,36 @@ test('stores secrets through the Swift Keychain helper without secret arguments'
   assert.equal(calls[0].args.includes('-X'), false);
 });
 
+test('preflightWrite proves Keychain write access with a disposable item', async () => {
+  const calls: { args: string[]; input?: string }[] = [];
+  const runCommand: KeychainCommandRunner = async (args, input) => {
+    calls.push({ args, input });
+    return { stdout: '', stderr: '' };
+  };
+  const store = createKeychainProfileSecretStore(runCommand, 'darwin');
+
+  await store.preflightWrite?.('default');
+
+  assert.deepEqual(calls, [
+    {
+      args: [
+        'set',
+        'whoop-cli',
+        'default:preflight',
+      ],
+      input: 'whoop-cli-keychain-preflight',
+    },
+    {
+      args: [
+        'delete',
+        'whoop-cli',
+        'default:preflight',
+      ],
+      input: undefined,
+    },
+  ]);
+});
+
 test('reads a stored secret from the Swift Keychain helper', async () => {
   const runCommand: KeychainCommandRunner = async () => ({
     stdout: 'stored-secret',
