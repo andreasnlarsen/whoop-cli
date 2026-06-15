@@ -83,15 +83,21 @@ Then use:
 whoop --help
 ```
 
-### OpenClaw skill install (optional)
+### Agent skill install (optional)
 
-After global install, copy bundled skill into OpenClaw workspace:
+After global install, copy the bundled skill into the local agent skills folder:
 
 ```bash
-whoop openclaw install-skill --force
+whoop skill install --target agents --force
 ```
 
-(Default target: `~/.openclaw/workspace/skills/whoop-cli/SKILL.md`)
+Default target: `~/.agents/skills/whoop-cli/SKILL.md`, with a Codex discovery symlink at `~/.codex/skills/whoop-cli`.
+
+For OpenClaw:
+
+```bash
+whoop skill install --target openclaw --force
+```
 
 ---
 
@@ -288,7 +294,8 @@ whoop activity list --days 30 --json | jq '.data.records | map(select(.sport_id 
 - `whoop sync pull --start YYYY-MM-DD --end YYYY-MM-DD --out ./whoop.jsonl`
 - `whoop webhook verify --secret ... --timestamp ... --signature ... --body-file ...`
 - `whoop activity map-v1-id --id <legacyV1ActivityId>`
-- `whoop openclaw install-skill --force`
+- `whoop skill install --target agents --force`
+- `whoop skill install --target openclaw --force`
 
 ### Behavior/experiments
 - `whoop behavior impacts --file ~/.whoop-cli/journal-observations.jsonl`

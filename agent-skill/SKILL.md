@@ -1,6 +1,6 @@
 ---
 name: whoop-cli
-description: Companion skill for @andreasnlarsen/whoop-cli: agent-friendly WHOOP access via stable CLI JSON (day briefs, health flags, trends, exports) without raw API plumbing.
+description: Use when operating the installed `whoop` CLI for agent-friendly WHOOP access, local Keychain-backed auth checks, daily briefs, summaries, health flags, activity trends, exports, or installing the bundled WHOOP agent skill into `~/.agents`, Codex, OpenClaw, or another agent skill directory.
 metadata:
   openclaw:
     requires:
@@ -19,21 +19,21 @@ metadata:
 
 Use the installed `whoop` command.
 
-## Security + credential handling (required)
+## Security + Credential Handling
 
-- Never ask users to paste client secrets/tokens into chat.
-- For first-time auth, the user should run login **locally on their own shell**.
+- Never ask users to paste client secrets or tokens into chat.
+- For first-time auth, have the user run login locally in their own shell.
 - The CLI stores the WHOOP client secret, access token, and refresh token in macOS Keychain.
 - Profile JSON at `~/.whoop-cli/profiles/<profile>.json` stores non-secret metadata only.
 - Keychain access uses macOS Security APIs through `/usr/bin/swift`; do not replace this with command-line secret arguments.
 - If `/usr/bin/swift` is unavailable, tell the user to install Apple Command Line Tools with `xcode-select --install`.
 - If a sandboxed agent shell cannot access macOS Keychain, rerun the `whoop` command with normal user permissions; do not use secret-bearing command-line arguments as a fallback.
 - After login, regular read commands should not need env vars, 1Password prompts, passwords, or Touch ID.
-- If macOS asks for "password data for new item" during login, stop and update/reinstall `whoop`; the CLI should write Keychain items non-interactively.
-- Prefer read-only operational commands in agent flows (`summary`, `day-brief`, `health`, `trend`, `sync pull`).
+- If macOS asks for "password data for new item" during login, stop and update or reinstall `whoop`; the CLI should write Keychain items non-interactively.
+- Prefer read-only operational commands in agent flows: `summary`, `day-brief`, `health`, `trend`, and `sync pull`.
 - Do not run `whoop auth login` unless the user explicitly asks for login help.
 
-## Install / bootstrap
+## Install / Bootstrap
 
 If `whoop` is missing:
 
@@ -41,13 +41,27 @@ If `whoop` is missing:
 npm install -g @andreasnlarsen/whoop-cli@0.3.1
 ```
 
-Optional OpenClaw skill install from package bundle:
+Install this bundled skill for local Codex/agent use:
 
 ```bash
-whoop openclaw install-skill --force
+whoop skill install --target agents --force
 ```
 
-## Core checks
+That writes `~/.agents/skills/whoop-cli/SKILL.md` and links it into `~/.codex/skills/whoop-cli`.
+
+Install for OpenClaw when needed:
+
+```bash
+whoop skill install --target openclaw --force
+```
+
+Install to another skill directory:
+
+```bash
+whoop skill install --target path --skill-dir /path/to/skills/whoop-cli --force
+```
+
+## Core Checks
 
 1. `whoop auth status --json`
 2. If unauthenticated, ask the user to run local login:
@@ -55,9 +69,10 @@ whoop openclaw install-skill --force
    - Prefer the interactive hidden client-secret prompt.
    - Use one-time env/secret-manager injection only when automation requires it.
 3. Validate:
+   - `whoop summary --json --pretty`
    - `whoop day-brief --json --pretty`
 
-## Useful commands
+## Useful Commands
 
 - Daily:
   - `whoop summary --json --pretty`
@@ -69,27 +84,26 @@ whoop openclaw install-skill --force
   - `whoop activity trend --days 30 --json --pretty`
   - `whoop activity types --days 30 --json --pretty`
   - training-only: `whoop activity trend --days 30 --labeled-only --json --pretty`
+- Export:
+  - `whoop sync pull --start YYYY-MM-DD --end YYYY-MM-DD --out ./whoop.jsonl --json --pretty`
 
-### Activity interpretation guardrail (important)
+## Activity Interpretation Guardrail
 
-- WHOOP generic `activity` rows (often `sport_id=-1`) are auto-detected and may be unlabeled movement (housework/incidental activity), not intentional training.
+- WHOOP generic `activity` rows, often `sport_id=-1`, are auto-detected and may be unlabeled movement such as housework or incidental activity, not intentional training.
 - Do not treat generic `activity` as confirmed training volume by default.
-- For coaching/training recommendations, default to `--labeled-only` and report both total vs filtered counts.
+- For coaching or training recommendations, default to `--labeled-only` and report total versus filtered counts.
 
-### Agent filtering pattern (jq-friendly)
+## Agent Filtering Pattern
 
 - Canonical source: `whoop activity list --json`
-- Prefer built-in filters first (`--labeled-only`, `--generic-only`, `--sport-id`, `--sport-name`).
-- If custom slicing is needed and `jq` is available, filter shell-side from raw JSON (example):
+- Prefer built-in filters first: `--labeled-only`, `--generic-only`, `--sport-id`, `--sport-name`.
+- If custom slicing is needed and `jq` is available, filter shell-side from raw JSON:
 
 ```bash
 whoop activity list --days 30 --json | jq '.data.records | map(select(.sport_id != -1))'
 ```
 
-- Export:
-  - `whoop sync pull --start YYYY-MM-DD --end YYYY-MM-DD --out ./whoop.jsonl --json --pretty`
-
-## Experiment protocol (agent-required)
+## Experiment Protocol
 
 - Canonical state: `~/.whoop-cli/experiments.json` only.
 - Plan experiments with context at creation time:
@@ -100,13 +114,13 @@ whoop activity list --days 30 --json | jq '.data.records | map(select(.sport_id 
   - `whoop experiment status [--status planned|running|completed] [--id ...] --json --pretty`
 - Evaluate outcomes with:
   - `whoop experiment report --id ... --json --pretty`
-- Profile scope is strict by default (active `--profile` only).
-  - Use `--all-profiles` only when cross-profile visibility is explicitly needed.
-- Prefer output field `sourceOfTruth` (path to canonical state file); `experimentsFile` is kept as compatibility alias.
+- Profile scope is strict by default: active `--profile` only.
+- Use `--all-profiles` only when cross-profile visibility is explicitly needed.
+- Prefer output field `sourceOfTruth`; `experimentsFile` is kept as compatibility alias.
 - Avoid duplicating experiment state into other files unless the user explicitly asks for separate notes.
 
 ## Safety
 
 - Never print client secrets or raw tokens.
 - Keep API errors concise and actionable.
-- Treat this integration as unofficial/non-affiliated.
+- Treat this integration as unofficial and not affiliated with WHOOP.

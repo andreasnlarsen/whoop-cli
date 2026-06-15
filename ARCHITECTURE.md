@@ -150,10 +150,15 @@ Exit codes:
 - JSON error details redact fields that look like secrets, tokens, authorization headers, or cookies
 - webhook verification uses HMAC-SHA256 + base64 + timing-safe compare
 
-## 8) OpenClaw integration pattern
+## 8) Agent skill integration pattern
 
 Recommended flows:
 1. `whoop auth status --json`
 2. data command (`day-brief`, `summary`, `health flags`) with `--json`
 3. concise agent interpretation + scheduling/reminders
 4. periodic `auth refresh` health checks for unattended jobs
+
+Bundled skill install targets:
+- local agents/Codex: `whoop skill install --target agents --force`
+- OpenClaw: `whoop skill install --target openclaw --force`
+- custom directory: `whoop skill install --target path --skill-dir /path/to/skills/whoop-cli --force`

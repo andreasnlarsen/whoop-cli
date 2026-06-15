@@ -65,11 +65,11 @@ npm view @andreasnlarsen/whoop-cli version dist-tags.latest --json
 
 Expected: latest is `X.Y.Z`.
 
-### E) Publish ClawHub skill update (keep installer aligned with npm release)
+### E) Publish agent skill update (keep installer aligned with npm release)
 
 After npm `X.Y.Z` is live, update and publish the bundled skill so agent installs resolve to that exact package version.
 
-1) Update `openclaw-skill/SKILL.md`:
+1) Update `agent-skill/SKILL.md`:
 - `metadata.openclaw.install[].package` -> `@andreasnlarsen/whoop-cli@X.Y.Z`
 - install snippet -> `npm install -g @andreasnlarsen/whoop-cli@X.Y.Z`
 
@@ -78,7 +78,7 @@ After npm `X.Y.Z` is live, update and publish the bundled skill so agent install
 3) Publish to ClawHub with a new skill version:
 
 ```bash
-npx -y clawhub publish ./openclaw-skill \
+npx -y clawhub publish ./agent-skill \
   --slug whoop-cli \
   --name "WHOOP CLI for Agents" \
   --version <skill-semver> \
@@ -130,5 +130,6 @@ After trusted publisher is active, prefer tag-based OIDC releases only.
   - `npx -y @andreasnlarsen/whoop-cli summary --json --pretty`
 - Global install:
   - `npm install -g @andreasnlarsen/whoop-cli`
-- Optional OpenClaw skill install:
-  - `whoop openclaw install-skill --force`
+- Optional local agent skill install:
+  - `whoop skill install --target agents --force`
+  - `whoop skill install --target openclaw --force`
