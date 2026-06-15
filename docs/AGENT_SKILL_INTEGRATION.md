@@ -1,8 +1,9 @@
-# OpenClaw integration guide
+# Agent skill integration guide
 
 ## Recommended daily automations
 
 ### Morning brief
+
 Run at wake-up:
 
 ```bash
@@ -43,7 +44,29 @@ whoop sync pull --start 2026-02-01 --end 2026-02-07 --out ./whoop-week.jsonl --j
 
 Use `scripts/whoop-refresh-monitor.sh` every 30-60 minutes for unattended setups.
 
-## Suggested OpenClaw skill usage flow
+## Skill install targets
+
+Default local agent/Codex setup:
+
+```bash
+whoop skill install --target agents --force
+```
+
+This writes `~/.agents/skills/whoop-cli/SKILL.md` and links `~/.codex/skills/whoop-cli` to that canonical folder.
+
+OpenClaw setup:
+
+```bash
+whoop skill install --target openclaw --force
+```
+
+Custom skill directory:
+
+```bash
+whoop skill install --target path --skill-dir /path/to/skills/whoop-cli --force
+```
+
+## Suggested agent skill usage flow
 
 1. `whoop auth status --json`
 2. if unauthenticated: instruct user to run `whoop auth login`

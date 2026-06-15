@@ -2,3 +2,5 @@ node_modules/
 dist/
 .env
 *.log
+progress/review-ledgers/
+archive/review-ledgers/

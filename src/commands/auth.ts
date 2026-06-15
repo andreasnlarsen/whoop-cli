@@ -1,9 +1,18 @@
 import { Command } from 'commander';
-import { ask } from '../util/prompt.js';
+import { ask, askHidden, canPrompt } from '../util/prompt.js';
 import { tryOpenBrowser } from '../util/open-browser.js';
 import { buildAuthUrl, exchangeAuthCode, generateState, parseAuthInput } from '../auth/oauth.js';
 import { getGlobalOptions, printData, printError } from './context.js';
-import { loadProfile, saveProfile, clearProfileTokens, type WhoopProfile } from '../store/profile-store.js';
+import {
+  loadProfile,
+  loadProfileClientSecret,
+  loadProfileMetadata,
+  saveProfile,
+  clearProfileTokens,
+  assertProfileSecretStorageSupported,
+  preflightProfileSecretStorage,
+  type WhoopProfile,
+} from '../store/profile-store.js';
 import { tokenFromOAuth, refreshProfileToken } from '../auth/token-service.js';
 import { configError, usageError } from '../http/errors.js';
 
@@ -25,6 +34,14 @@ const splitScopes = (raw?: string): string[] =>
         .filter(Boolean)
     : DEFAULT_SCOPES;
 
+export const resolveLoginState = (providedState: string | undefined, hasCodeInput: boolean): string => {
+  if (hasCodeInput && !providedState) {
+    throw usageError('--state is required with --code so OAuth state can be verified.');
+  }
+
+  return providedState ?? generateState();
+};
+
 const resolveClientConfig = async (
   profileName: string,
   baseUrl: string,
@@ -34,16 +51,26 @@ const resolveClientConfig = async (
     redirectUri?: string;
     scopes?: string;
   },
+  interactive: boolean,
 ): Promise<WhoopProfile> => {
-  const existing = await loadProfile(profileName);
+  const existing = await loadProfileMetadata(profileName);
 
-  const clientId = overrides.clientId ?? process.env.WHOOP_CLIENT_ID ?? existing?.clientId;
-  const clientSecret = overrides.clientSecret ?? process.env.WHOOP_CLIENT_SECRET ?? existing?.clientSecret;
-  const redirectUri = overrides.redirectUri ?? process.env.WHOOP_REDIRECT_URI ?? existing?.redirectUri;
+  let clientId = overrides.clientId ?? process.env.WHOOP_CLIENT_ID ?? existing?.clientId;
+  let clientSecret = overrides.clientSecret ?? process.env.WHOOP_CLIENT_SECRET;
+  let redirectUri = overrides.redirectUri ?? process.env.WHOOP_REDIRECT_URI ?? existing?.redirectUri;
+  if (!clientSecret && existing) {
+    clientSecret = await loadProfileClientSecret(profileName);
+  }
+
+  if (interactive && canPrompt()) {
+    clientId = clientId || (await ask('WHOOP client ID: ')).trim();
+    clientSecret = clientSecret || (await askHidden('WHOOP client secret: ')).trim();
+    redirectUri = redirectUri || (await ask('WHOOP redirect URI: ')).trim();
+  }
 
   if (!clientId || !clientSecret || !redirectUri) {
     throw configError(
-      'Missing WHOOP OAuth client config. Provide --client-id --client-secret --redirect-uri (or env vars WHOOP_CLIENT_ID/WHOOP_CLIENT_SECRET/WHOOP_REDIRECT_URI).',
+      'Missing WHOOP OAuth client config. Run whoop auth login in an interactive terminal, or provide --client-id --client-secret --redirect-uri for one-time setup.',
     );
   }
 
@@ -56,7 +83,6 @@ const resolveClientConfig = async (
     scopes: splitScopes(overrides.scopes ?? existing?.scopes?.join(' ')),
     createdAt: existing?.createdAt ?? new Date().toISOString(),
     updatedAt: new Date().toISOString(),
-    tokens: existing?.tokens,
   };
 };
 
@@ -70,20 +96,22 @@ export const registerAuthCommands = (program: Command): void => {
     .option('--client-secret <secret>')
     .option('--redirect-uri <url>')
     .option('--scopes <scopes>', 'space/comma separated scopes')
-    .option('--code <code>', 'authorization code (skip prompt)')
-    .option('--state <state>', 'state override')
+    .option('--code <url>', 'full redirect URL (requires --state; skip prompt)')
+    .option('--state <state>', 'expected OAuth state; required with --code')
     .option('--no-open', 'do not attempt to open browser')
     .action(async function loginAction(opts) {
       try {
         const globals = getGlobalOptions(this);
+        assertProfileSecretStorageSupported();
+        await preflightProfileSecretStorage(globals.profile);
         const profile = await resolveClientConfig(globals.profile, globals.baseUrl, {
           clientId: opts.clientId,
           clientSecret: opts.clientSecret,
           redirectUri: opts.redirectUri,
           scopes: opts.scopes,
-        });
+        }, !globals.json);
 
-        const state = opts.state ?? generateState();
+        const state = resolveLoginState(opts.state, Boolean(opts.code));
         const authUrl = buildAuthUrl(
           {
             clientId: profile.clientId,
@@ -96,22 +124,31 @@ export const registerAuthCommands = (program: Command): void => {
         );
 
         let openAttempted = false;
-        if (opts.open !== false) {
+        if (!opts.code && opts.open !== false) {
           openAttempted = await tryOpenBrowser(authUrl);
         }
 
-        let code = opts.code as string | undefined;
-        if (!code) {
+        let code: string | undefined;
+        if (opts.code) {
+          const parsed = parseAuthInput(String(opts.code));
+          code = parsed.code;
+          if (parsed.state !== state) {
+            throw usageError('OAuth state mismatch. Retry login flow for security.', {
+              expected: state,
+              received: parsed.state,
+            });
+          }
+        } else {
           if (!globals.json) {
             console.log('Open this URL and authorize access:');
             console.log(authUrl);
             console.log(openAttempted ? '(attempted browser open)' : '(could not auto-open browser; copy URL manually)');
           }
 
-          const input = await ask('Paste redirect URL (or authorization code): ');
+          const input = await ask('Paste redirect URL: ');
           const parsed = parseAuthInput(input);
           code = parsed.code;
-          if (parsed.state && parsed.state !== state) {
+          if (parsed.state !== state) {
             throw usageError('OAuth state mismatch. Retry login flow for security.', {
               expected: state,
               received: parsed.state,
@@ -129,7 +166,10 @@ export const registerAuthCommands = (program: Command): void => {
           code,
         );
 
-        profile.tokens = tokenFromOAuth(tokenPayload, profile.tokens?.refreshToken);
+        const previousProfile = tokenPayload.refresh_token
+          ? undefined
+          : await loadProfile(globals.profile);
+        profile.tokens = tokenFromOAuth(tokenPayload, previousProfile?.tokens?.refreshToken);
         await saveProfile(globals.profile, profile);
 
         printData(this, {
@@ -137,6 +177,7 @@ export const registerAuthCommands = (program: Command): void => {
           authenticated: true,
           scopes: profile.scopes,
           expiresAt: profile.tokens.expiresAt,
+          secretStorage: 'macos-keychain',
         });
       } catch (err) {
         printError(this, err);
@@ -154,6 +195,8 @@ export const registerAuthCommands = (program: Command): void => {
           printData(this, {
             profile: globals.profile,
             authenticated: false,
+            configured: Boolean(profile?.clientId && profile.clientSecret && profile.redirectUri),
+            secretStorage: 'macos-keychain',
           });
           return;
         }
@@ -170,6 +213,7 @@ export const registerAuthCommands = (program: Command): void => {
           expiresAt: profile.tokens.expiresAt,
           expiresInSeconds: remainingSeconds,
           hasRefreshToken: Boolean(profile.tokens.refreshToken),
+          secretStorage: 'macos-keychain',
         });
       } catch (err) {
         printError(this, err);

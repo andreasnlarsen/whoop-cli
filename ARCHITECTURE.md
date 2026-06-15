@@ -48,6 +48,7 @@ src/
   output/
     envelope.ts
   store/
+    keychain-secret-store.ts
     profile-store.ts
   util/
     activity.ts
@@ -70,12 +71,16 @@ test/
 
 ### Supported flow
 - `whoop auth login` prints auth URL and optionally opens browser.
-- User pastes full redirect URL or auth code.
+- User pastes the full redirect URL so OAuth `state` can be verified.
 - CLI exchanges code at WHOOP token endpoint.
 
 ### Token handling
-- Tokens stored per profile in `~/.whoop-cli/profiles/<name>.json`
-- File writes are atomic + mode `0600`
+- macOS Keychain stores the WHOOP client secret, access token, and refresh token under service `whoop-cli`
+- Keychain access uses macOS Security APIs through `/usr/bin/swift`; write values are passed over stdin instead of command-line arguments
+- If `/usr/bin/swift` is unavailable, the CLI reports the missing Apple Command Line Tools prerequisite instead of falling back to command-line secret arguments
+- If a sandboxed agent process cannot access macOS Keychain, rerun the CLI with normal user permissions instead of falling back to secret-bearing command-line arguments
+- Profile JSON at `~/.whoop-cli/profiles/<name>.json` stores metadata only
+- Profile JSON writes are atomic + mode `0600`
 - Refresh runs proactively (expiry skew) and on-demand (`auth refresh`)
 - Single-flight lock prevents concurrent refresh races
 
@@ -139,13 +144,21 @@ Exit codes:
 ## 7) Security
 
 - never log secrets intentionally
-- token persistence with strict file permissions
+- persistent secrets live in macOS Keychain instead of profile JSON
+- profile metadata persistence uses strict file permissions
+- OAuth login requires full redirect URL input so `state` can be checked
+- JSON error details redact fields that look like secrets, tokens, authorization headers, or cookies
 - webhook verification uses HMAC-SHA256 + base64 + timing-safe compare
 
-## 8) OpenClaw integration pattern
+## 8) Agent skill integration pattern
 
 Recommended flows:
 1. `whoop auth status --json`
 2. data command (`day-brief`, `summary`, `health flags`) with `--json`
 3. concise agent interpretation + scheduling/reminders
 4. periodic `auth refresh` health checks for unattended jobs
+
+Bundled skill install targets:
+- local agents/Codex: `whoop skill install --target agents --force`
+- OpenClaw: `whoop skill install --target openclaw --force`
+- custom directory: `whoop skill install --target path --skill-dir /path/to/skills/whoop-cli --force`
