@@ -6,11 +6,6 @@ metadata:
     requires:
       bins:
         - whoop
-      env:
-        - WHOOP_CLIENT_ID
-        - WHOOP_CLIENT_SECRET
-        - WHOOP_REDIRECT_URI
-    primaryEnv: WHOOP_CLIENT_SECRET
     homepage: https://github.com/andreasnlarsen/whoop-cli
     install:
       - kind: node
@@ -28,9 +23,11 @@ Use the installed `whoop` command.
 
 - Never ask users to paste client secrets/tokens into chat.
 - For first-time auth, the user should run login **locally on their own shell**.
+- The CLI stores the WHOOP client secret, access token, and refresh token in macOS Keychain.
+- Profile JSON at `~/.whoop-cli/profiles/<profile>.json` stores non-secret metadata only.
+- After login, regular read commands should not need env vars, 1Password prompts, passwords, or Touch ID.
 - Prefer read-only operational commands in agent flows (`summary`, `day-brief`, `health`, `trend`, `sync pull`).
 - Do not run `whoop auth login` unless the user explicitly asks for login help.
-- Tokens are stored locally at `~/.whoop-cli/profiles/<profile>.json` by the CLI.
 
 ## Install / bootstrap
 
@@ -50,7 +47,9 @@ whoop openclaw install-skill --force
 
 1. `whoop auth status --json`
 2. If unauthenticated, ask the user to run local login:
-   - `whoop auth login --client-id ... --client-secret ... --redirect-uri ...`
+   - `whoop auth login`
+   - Prefer the interactive hidden client-secret prompt.
+   - Use one-time env/secret-manager injection only when automation requires it.
 3. Validate:
    - `whoop day-brief --json --pretty`
 

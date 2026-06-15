@@ -21,6 +21,11 @@ That means each user (or each installer/agent) must create a WHOOP Developer app
 
 There is **no managed/shared auth service** in this repo right now.
 
+Secrets are local-only:
+- macOS Keychain stores the WHOOP client secret, access token, and refresh token.
+- `~/.whoop-cli/profiles/<name>.json` stores non-secret profile metadata only.
+- After login, regular reads and refreshes should not need 1Password, env vars, passwords, or Touch ID prompts.
+
 ## Important legal / brand notice
 
 - This project is **unofficial** and is **not affiliated with, endorsed by, or sponsored by Whoop, Inc.**
@@ -37,8 +42,7 @@ There is **no managed/shared auth service** in this repo right now.
 - Package: `@andreasnlarsen/whoop-cli`
 - Releases are published via GitHub Actions trusted publishing (OIDC) with npm provenance.
 - This integration is unofficial and not affiliated with Whoop, Inc.
-- Never paste OAuth client secrets/tokens into chat. Run login locally:
-  - `whoop auth login --client-id ... --client-secret ... --redirect-uri ...`
+- Never paste OAuth client secrets/tokens into chat. Run login locally and let the CLI store secrets in macOS Keychain.
 - Verify install quickly:
   - `npx -y @andreasnlarsen/whoop-cli --help`
   - `whoop auth status --json`
@@ -138,12 +142,15 @@ Then copy these 3 values from WHOOP dashboard:
 
 ## 3) Login
 
+Run login locally and paste the three WHOOP app values when prompted. The client secret prompt is hidden, so it does not land in shell history or process arguments.
+
 ```bash
-whoop auth login \
-  --client-id "<CLIENT_ID>" \
-  --client-secret "<CLIENT_SECRET>" \
-  --redirect-uri "<REDIRECT_URI>"
+whoop auth login
 ```
+
+For scripted setup only, you can provide `--client-id`, `--client-secret`, and `--redirect-uri`, or inject `WHOOP_CLIENT_ID`, `WHOOP_CLIENT_SECRET`, and `WHOOP_REDIRECT_URI` for that one command. Do not keep real secrets in shell startup files, checked-in `.env` files, or shared docs.
+
+The CLI stores the client secret and OAuth tokens in macOS Keychain under the `whoop-cli` service. The profile JSON on disk keeps only metadata.
 
 Then test:
 
@@ -218,7 +225,7 @@ whoop day-brief --json --pretty
 whoop auth status --json
 ```
 
-2. If not authenticated, run `whoop auth login ...`
+2. If not authenticated, help the user run `whoop auth login` locally. Prefer the interactive hidden client-secret prompt; use a one-time env/secret-manager injection only when automation requires it.
 3. Validate with:
 
 ```bash
@@ -336,9 +343,11 @@ Exit codes:
 
 ## Security
 
-- Tokens saved in `~/.whoop-cli/profiles/<name>.json` with strict file permissions
+- macOS Keychain stores the WHOOP client secret, access token, and refresh token
+- `~/.whoop-cli/profiles/<name>.json` stores non-secret metadata with strict file permissions
 - Refresh-token flow supported for automation
 - CLI avoids printing secrets by default
+- JSON error details redact fields that look like secrets, tokens, authorization headers, or cookies
 
 ---
 

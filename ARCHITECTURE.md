@@ -48,6 +48,7 @@ src/
   output/
     envelope.ts
   store/
+    keychain-secret-store.ts
     profile-store.ts
   util/
     activity.ts
@@ -70,12 +71,13 @@ test/
 
 ### Supported flow
 - `whoop auth login` prints auth URL and optionally opens browser.
-- User pastes full redirect URL or auth code.
+- User pastes the full redirect URL so OAuth `state` can be verified.
 - CLI exchanges code at WHOOP token endpoint.
 
 ### Token handling
-- Tokens stored per profile in `~/.whoop-cli/profiles/<name>.json`
-- File writes are atomic + mode `0600`
+- macOS Keychain stores the WHOOP client secret, access token, and refresh token under service `whoop-cli`
+- Profile JSON at `~/.whoop-cli/profiles/<name>.json` stores metadata only
+- Profile JSON writes are atomic + mode `0600`
 - Refresh runs proactively (expiry skew) and on-demand (`auth refresh`)
 - Single-flight lock prevents concurrent refresh races
 
@@ -139,7 +141,10 @@ Exit codes:
 ## 7) Security
 
 - never log secrets intentionally
-- token persistence with strict file permissions
+- persistent secrets live in macOS Keychain instead of profile JSON
+- profile metadata persistence uses strict file permissions
+- OAuth login requires full redirect URL input so `state` can be checked
+- JSON error details redact fields that look like secrets, tokens, authorization headers, or cookies
 - webhook verification uses HMAC-SHA256 + base64 + timing-safe compare
 
 ## 8) OpenClaw integration pattern
