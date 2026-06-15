@@ -9,7 +9,7 @@ metadata:
     homepage: https://github.com/andreasnlarsen/whoop-cli
     install:
       - kind: node
-        package: "@andreasnlarsen/whoop-cli@0.3.1"
+        package: "@andreasnlarsen/whoop-cli@0.4.0"
         bins:
           - whoop
         label: Install whoop-cli from npm
@@ -38,7 +38,7 @@ Use the installed `whoop` command.
 If `whoop` is missing:
 
 ```bash
-npm install -g @andreasnlarsen/whoop-cli@0.3.1
+npm install -g @andreasnlarsen/whoop-cli@0.4.0
 ```
 
 Install this bundled skill for local Codex/agent use:
