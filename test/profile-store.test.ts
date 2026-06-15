@@ -6,6 +6,7 @@ import { join } from 'node:path';
 import {
   clearProfileTokens,
   loadProfile,
+  loadProfileMetadata,
   saveProfile,
   setProfileSecretStoreForTesting,
   resetProfileSecretStoreForTesting,
@@ -31,6 +32,20 @@ class MemoryProfileSecretStore implements ProfileSecretStore {
 
   key(profileName: string, name: ProfileSecretName): string {
     return `${profileName}:${name}`;
+  }
+}
+
+class ThrowingProfileSecretStore implements ProfileSecretStore {
+  async get(): Promise<string | undefined> {
+    throw new Error('secret store should not be read');
+  }
+
+  async set(): Promise<void> {
+    throw new Error('secret store should not be written');
+  }
+
+  async delete(): Promise<void> {
+    throw new Error('secret store should not be changed');
   }
 }
 
@@ -120,6 +135,25 @@ test('loadProfile hydrates secrets from the secret store', async () => {
 
     assert.equal(loaded?.clientSecret, 'client-secret-value');
     assert.deepEqual(loaded?.tokens, profile.tokens);
+  });
+});
+
+test('loadProfileMetadata reads stored profile config without secret store access', async () => {
+  await withTempHome(async () => {
+    const secrets = new MemoryProfileSecretStore();
+    setProfileSecretStoreForTesting(secrets);
+
+    await saveProfile('default', sampleProfile());
+    setProfileSecretStoreForTesting(new ThrowingProfileSecretStore());
+
+    const metadata = await loadProfileMetadata('default');
+
+    assert.equal(metadata?.clientId, 'client-id-value');
+    assert.equal(metadata?.redirectUri, 'http://127.0.0.1:8787/callback');
+    assert.equal(metadata?.baseUrl, 'https://api.prod.whoop.com');
+    assert.deepEqual(metadata?.scopes, ['offline', 'read:recovery']);
+    assert.equal(metadata?.tokens?.hasRefreshToken, true);
+    assert.equal('clientSecret' in (metadata ?? {}), false);
   });
 });
 

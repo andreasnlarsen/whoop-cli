@@ -25,14 +25,14 @@ export interface WhoopProfile {
   tokens?: TokenSet;
 }
 
-interface StoredTokenMetadata {
+export interface StoredTokenMetadata {
   tokenType: string;
   scope?: string;
   expiresAt: string;
   hasRefreshToken: boolean;
 }
 
-interface StoredWhoopProfile {
+export interface StoredWhoopProfile {
   profileName: string;
   clientId: string;
   redirectUri: string;
@@ -76,9 +76,23 @@ export const profileForStorage = (name: string, profile: WhoopProfile): StoredWh
   tokens: storedTokenMetadata(profile.tokens),
 });
 
-export const loadProfile = async (name: string): Promise<WhoopProfile | null> => {
+export const loadProfileMetadata = async (name: string): Promise<StoredWhoopProfile | null> => {
   const profileName = sanitizeProfileName(name);
   const stored = await readJsonFile<StoredWhoopProfile>(profilePath(profileName));
+  if (!stored) {
+    return null;
+  }
+
+  return {
+    ...stored,
+    profileName,
+    baseUrl: normalizeBaseUrl(stored.baseUrl),
+  };
+};
+
+export const loadProfile = async (name: string): Promise<WhoopProfile | null> => {
+  const profileName = sanitizeProfileName(name);
+  const stored = await loadProfileMetadata(profileName);
   if (!stored) {
     return null;
   }

@@ -1,4 +1,3 @@
-import { createInterface as createCallbackInterface } from 'node:readline';
 import { createInterface } from 'node:readline/promises';
 import { stdin as input, stdout as output } from 'node:process';
 
@@ -19,28 +18,66 @@ export const askHidden = async (question: string): Promise<string> => {
     return ask(question);
   }
 
-  return new Promise((resolve) => {
-    output.write(question);
+  return new Promise((resolve, reject) => {
+    const wasRaw = input.isRaw;
+    let answer = '';
+    let settled = false;
 
-    const rl = createCallbackInterface({ input, output, terminal: true });
-    const muted = rl as typeof rl & {
-      _writeToOutput?: (value: string) => void;
-      stdoutMuted?: boolean;
+    const cleanup = (): void => {
+      input.off('data', onData);
+      input.off('error', onError);
+      input.setRawMode(wasRaw);
+      input.pause();
     };
-    const writeToOutput = muted._writeToOutput?.bind(rl);
 
-    muted.stdoutMuted = true;
-    muted._writeToOutput = (value: string): void => {
-      if (!muted.stdoutMuted || value.includes('\n') || value.includes('\r')) {
-        writeToOutput?.(value);
+    const finish = (): void => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      output.write('\n');
+      resolve(answer);
+    };
+
+    const fail = (err: Error): void => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      output.write('\n');
+      reject(err);
+    };
+
+    const onError = (err: Error): void => {
+      fail(err);
+    };
+
+    const onData = (chunk: Buffer | string): void => {
+      const text = chunk.toString('utf8');
+      for (const char of text) {
+        if (char === '\r' || char === '\n') {
+          finish();
+          return;
+        }
+
+        if (char === '\u0003') {
+          fail(new Error('Aborted with Ctrl+C'));
+          return;
+        }
+
+        if (char === '\u007f' || char === '\b') {
+          answer = answer.slice(0, -1);
+          continue;
+        }
+
+        if (char >= ' ') {
+          answer += char;
+        }
       }
     };
 
-    rl.question('', (answer) => {
-      muted.stdoutMuted = false;
-      rl.close();
-      output.write('\n');
-      resolve(answer);
-    });
+    output.write(question);
+    input.setRawMode(true);
+    input.resume();
+    input.on('data', onData);
+    input.on('error', onError);
   });
 };

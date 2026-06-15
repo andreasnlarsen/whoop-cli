@@ -3,7 +3,13 @@ import { ask, askHidden, canPrompt } from '../util/prompt.js';
 import { tryOpenBrowser } from '../util/open-browser.js';
 import { buildAuthUrl, exchangeAuthCode, generateState, parseAuthInput } from '../auth/oauth.js';
 import { getGlobalOptions, printData, printError } from './context.js';
-import { loadProfile, saveProfile, clearProfileTokens, type WhoopProfile } from '../store/profile-store.js';
+import {
+  loadProfile,
+  loadProfileMetadata,
+  saveProfile,
+  clearProfileTokens,
+  type WhoopProfile,
+} from '../store/profile-store.js';
 import { tokenFromOAuth, refreshProfileToken } from '../auth/token-service.js';
 import { configError, usageError } from '../http/errors.js';
 
@@ -44,10 +50,10 @@ const resolveClientConfig = async (
   },
   interactive: boolean,
 ): Promise<WhoopProfile> => {
-  const existing = await loadProfile(profileName);
+  const existing = await loadProfileMetadata(profileName);
 
   let clientId = overrides.clientId ?? process.env.WHOOP_CLIENT_ID ?? existing?.clientId;
-  let clientSecret = overrides.clientSecret ?? process.env.WHOOP_CLIENT_SECRET ?? existing?.clientSecret;
+  let clientSecret = overrides.clientSecret ?? process.env.WHOOP_CLIENT_SECRET;
   let redirectUri = overrides.redirectUri ?? process.env.WHOOP_REDIRECT_URI ?? existing?.redirectUri;
 
   if (interactive && canPrompt()) {
@@ -71,7 +77,6 @@ const resolveClientConfig = async (
     scopes: splitScopes(overrides.scopes ?? existing?.scopes?.join(' ')),
     createdAt: existing?.createdAt ?? new Date().toISOString(),
     updatedAt: new Date().toISOString(),
-    tokens: existing?.tokens,
   };
 };
 
@@ -153,7 +158,10 @@ export const registerAuthCommands = (program: Command): void => {
           code,
         );
 
-        profile.tokens = tokenFromOAuth(tokenPayload, profile.tokens?.refreshToken);
+        const previousProfile = tokenPayload.refresh_token
+          ? undefined
+          : await loadProfile(globals.profile);
+        profile.tokens = tokenFromOAuth(tokenPayload, previousProfile?.tokens?.refreshToken);
         await saveProfile(globals.profile, profile);
 
         printData(this, {
