@@ -10,17 +10,21 @@ import {
   loadProfileClientSecret,
   loadProfileMetadata,
   preflightProfileSecretStorage,
+  profileForStorage,
   saveProfile,
   setProfileSecretStoreForTesting,
+  setProfileSecretStoresForTesting,
   resetProfileSecretStoreForTesting,
   type TokenSet,
   type WhoopProfile,
 } from '../src/store/profile-store.js';
-import type { ProfileSecretName, ProfileSecretStore } from '../src/store/keychain-secret-store.js';
+import type { ProfileSecretName, ProfileSecretStore, SecretStorageKind } from '../src/store/profile-secret-store.js';
 
 class MemoryProfileSecretStore implements ProfileSecretStore {
   readonly values = new Map<string, string>();
   readonly preflightedProfiles: string[] = [];
+
+  constructor(readonly kind: SecretStorageKind = 'macos-keychain') {}
 
   async preflightWrite(profileName: string): Promise<void> {
     this.preflightedProfiles.push(profileName);
@@ -50,6 +54,8 @@ class UnsupportedProfileSecretStore extends MemoryProfileSecretStore {
 }
 
 class ThrowingProfileSecretStore implements ProfileSecretStore {
+  readonly kind = 'macos-keychain';
+
   async get(): Promise<string | undefined> {
     throw new Error('secret store should not be read');
   }
@@ -60,6 +66,12 @@ class ThrowingProfileSecretStore implements ProfileSecretStore {
 
   async delete(): Promise<void> {
     throw new Error('secret store should not be changed');
+  }
+}
+
+class DeleteThrowingProfileSecretStore extends MemoryProfileSecretStore {
+  async delete(): Promise<void> {
+    throw new Error('old cleanup failed');
   }
 }
 
@@ -80,6 +92,7 @@ const sampleProfile = (): WhoopProfile => ({
   scopes: ['offline', 'read:recovery'],
   createdAt: '2026-01-01T00:00:00.000Z',
   updatedAt: '2026-01-01T00:00:00.000Z',
+  secretStorage: 'macos-keychain',
   tokens: sampleToken(),
 });
 
@@ -98,6 +111,22 @@ const withTempHome = async (fn: (home: string) => Promise<void>): Promise<void> 
       process.env.HOME = originalHome;
     }
     await rm(home, { recursive: true, force: true });
+  }
+};
+
+const withPlatform = async (
+  platform: NodeJS.Platform,
+  fn: () => Promise<void>,
+): Promise<void> => {
+  const descriptor = Object.getOwnPropertyDescriptor(process, 'platform');
+  Object.defineProperty(process, 'platform', { value: platform });
+
+  try {
+    await fn();
+  } finally {
+    if (descriptor) {
+      Object.defineProperty(process, 'platform', descriptor);
+    }
   }
 };
 
@@ -135,6 +164,31 @@ test('saveProfile writes metadata to disk and secrets to the secret store', asyn
     assert.equal(await secrets.get('agent_default', 'clientSecret'), 'client-secret-value');
     assert.equal(await secrets.get('agent_default', 'accessToken'), 'access-token-value');
     assert.equal(await secrets.get('agent_default', 'refreshToken'), 'refresh-token-value');
+  });
+});
+
+test('profileForStorage stores 1Password metadata without secret values', () => {
+  const stored = profileForStorage('default', {
+    ...sampleProfile(),
+    secretStorage: 'onepassword',
+    secretStorageConfig: {
+      onePassword: {
+        vault: 'Ops',
+        item: 'WHOOP default',
+      },
+    },
+  });
+  const raw = JSON.stringify(stored);
+
+  assert.equal(raw.includes('client-secret-value'), false);
+  assert.equal(raw.includes('access-token-value'), false);
+  assert.equal(raw.includes('refresh-token-value'), false);
+  assert.equal(stored.secretStorage, 'onepassword');
+  assert.deepEqual(stored.secretStorageConfig, {
+    onePassword: {
+      vault: 'Ops',
+      item: 'WHOOP default',
+    },
   });
 });
 
@@ -341,5 +395,174 @@ test('saveProfile restores previous secrets if metadata write fails', async () =
     assert.equal(await secrets.get('default', 'clientSecret'), 'old-client-secret');
     assert.equal(await secrets.get('default', 'accessToken'), 'old-access-token');
     assert.equal(await secrets.get('default', 'refreshToken'), 'old-refresh-token');
+  });
+});
+
+test('saveProfile removes secrets from the old backend when secret storage changes', async () => {
+  await withTempHome(async () => {
+    const keychainSecrets = new MemoryProfileSecretStore('macos-keychain');
+    const onePasswordSecrets = new MemoryProfileSecretStore('onepassword');
+    setProfileSecretStoresForTesting({
+      'macos-keychain': keychainSecrets,
+      onepassword: onePasswordSecrets,
+    });
+
+    await saveProfile('default', sampleProfile());
+    await saveProfile('default', {
+      ...sampleProfile(),
+      secretStorage: 'onepassword',
+      secretStorageConfig: {
+        onePassword: {
+          vault: 'Ops',
+          item: 'WHOOP default',
+        },
+      },
+      tokens: {
+        ...sampleToken(),
+        accessToken: 'new-access-token',
+        refreshToken: 'new-refresh-token',
+      },
+    });
+
+    assert.equal(await keychainSecrets.get('default', 'clientSecret'), undefined);
+    assert.equal(await keychainSecrets.get('default', 'accessToken'), undefined);
+    assert.equal(await keychainSecrets.get('default', 'refreshToken'), undefined);
+    assert.equal(await onePasswordSecrets.get('default', 'clientSecret'), 'client-secret-value');
+    assert.equal(await onePasswordSecrets.get('default', 'accessToken'), 'new-access-token');
+    assert.equal(await onePasswordSecrets.get('default', 'refreshToken'), 'new-refresh-token');
+
+    const metadata = await loadProfileMetadata('default');
+    assert.equal(metadata?.secretStorage, 'onepassword');
+    assert.deepEqual(metadata?.secretStorageConfig, {
+      onePassword: {
+        vault: 'Ops',
+        item: 'WHOOP default',
+      },
+    });
+  });
+});
+
+test('saveProfile skips cleanup when 1Password item selectors may alias', async () => {
+  await withTempHome(async (home) => {
+    const onePasswordSecrets = new MemoryProfileSecretStore('onepassword');
+    setProfileSecretStoresForTesting({
+      onepassword: onePasswordSecrets,
+    });
+    await mkdir(join(home, '.whoop-cli', 'profiles'), { recursive: true });
+    await writeFile(join(home, '.whoop-cli', 'profiles', 'default.json'), JSON.stringify(
+      profileForStorage('default', {
+        ...sampleProfile(),
+        secretStorage: 'onepassword',
+        secretStorageConfig: {
+          onePassword: {
+            vault: 'Ops',
+            item: 'WHOOP default',
+          },
+        },
+      }),
+    ), 'utf8');
+    await onePasswordSecrets.set('default', 'clientSecret', 'old-client-secret');
+    await onePasswordSecrets.set('default', 'accessToken', 'old-access-token');
+    await onePasswordSecrets.set('default', 'refreshToken', 'old-refresh-token');
+
+    await saveProfile('default', {
+      ...sampleProfile(),
+      secretStorage: 'onepassword',
+      secretStorageConfig: {
+        onePassword: {
+          vault: 'Ops',
+          item: 'whoop-item-id',
+        },
+      },
+      tokens: {
+        ...sampleToken(),
+        accessToken: 'new-access-token',
+        refreshToken: 'new-refresh-token',
+      },
+    });
+
+    assert.equal(await onePasswordSecrets.get('default', 'clientSecret'), 'client-secret-value');
+    assert.equal(await onePasswordSecrets.get('default', 'accessToken'), 'new-access-token');
+    assert.equal(await onePasswordSecrets.get('default', 'refreshToken'), 'new-refresh-token');
+
+    const metadata = await loadProfileMetadata('default');
+    assert.deepEqual(metadata?.secretStorageConfig, {
+      onePassword: {
+        vault: 'Ops',
+        item: 'whoop-item-id',
+      },
+    });
+  });
+});
+
+test('saveProfile can replace unsupported old backends during Linux setup', async () => {
+  await withTempHome(async (home) => {
+    const onePasswordSecrets = new MemoryProfileSecretStore('onepassword');
+    setProfileSecretStoresForTesting({
+      onepassword: onePasswordSecrets,
+    });
+    await mkdir(join(home, '.whoop-cli', 'profiles'), { recursive: true });
+    await writeFile(join(home, '.whoop-cli', 'profiles', 'default.json'), JSON.stringify({
+      ...profileForStorage('default', sampleProfile()),
+      secretStorage: 'macos-keychain',
+    }), 'utf8');
+
+    await withPlatform('linux', async () => {
+      await saveProfile('default', {
+        ...sampleProfile(),
+        secretStorage: 'onepassword',
+        secretStorageConfig: {
+          onePassword: {
+            vault: 'Ops',
+            item: 'WHOOP default',
+          },
+        },
+      });
+    });
+
+    assert.equal(await onePasswordSecrets.get('default', 'clientSecret'), 'client-secret-value');
+    assert.equal(await onePasswordSecrets.get('default', 'accessToken'), 'access-token-value');
+    assert.equal(await onePasswordSecrets.get('default', 'refreshToken'), 'refresh-token-value');
+
+    const metadata = await loadProfileMetadata('default');
+    assert.equal(metadata?.secretStorage, 'onepassword');
+  });
+});
+
+test('saveProfile commits new metadata before deleting old backend secrets', async () => {
+  await withTempHome(async (home) => {
+    const oldSecrets = new DeleteThrowingProfileSecretStore('macos-keychain');
+    const onePasswordSecrets = new MemoryProfileSecretStore('onepassword');
+    setProfileSecretStoresForTesting({
+      'macos-keychain': oldSecrets,
+      onepassword: onePasswordSecrets,
+    });
+    await mkdir(join(home, '.whoop-cli', 'profiles'), { recursive: true });
+    await writeFile(join(home, '.whoop-cli', 'profiles', 'default.json'), JSON.stringify(
+      profileForStorage('default', sampleProfile()),
+    ), 'utf8');
+    await oldSecrets.set('default', 'clientSecret', 'old-client-secret');
+    await oldSecrets.set('default', 'accessToken', 'old-access-token');
+    await oldSecrets.set('default', 'refreshToken', 'old-refresh-token');
+
+    await assert.rejects(
+      () => saveProfile('default', {
+        ...sampleProfile(),
+        secretStorage: 'onepassword',
+        secretStorageConfig: {
+          onePassword: {
+            vault: 'Ops',
+            item: 'WHOOP default',
+          },
+        },
+      }),
+      /old cleanup failed/,
+    );
+
+    const metadata = await loadProfileMetadata('default');
+    assert.equal(metadata?.secretStorage, 'onepassword');
+    assert.equal(await onePasswordSecrets.get('default', 'clientSecret'), 'client-secret-value');
+    assert.equal(await onePasswordSecrets.get('default', 'accessToken'), 'access-token-value');
+    assert.equal(await onePasswordSecrets.get('default', 'refreshToken'), 'refresh-token-value');
   });
 });

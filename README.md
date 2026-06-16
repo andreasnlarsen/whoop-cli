@@ -22,9 +22,11 @@ That means each user (or each installer/agent) must create a WHOOP Developer app
 There is **no managed/shared auth service** in this repo right now.
 
 Secrets are local-only:
-- macOS Keychain stores the WHOOP client secret, access token, and refresh token.
+- macOS defaults to Keychain for the WHOOP client secret, access token, and refresh token.
+- Linux/OpenClaw should use 1Password service-account storage for recurring unattended use.
+- Linux VPS setups can explicitly opt into `local-vps` storage for a Telegram-only/simple setup.
 - `~/.whoop-cli/profiles/<name>.json` stores non-secret profile metadata only.
-- After login, regular reads and refreshes should not need 1Password, env vars, passwords, or Touch ID prompts.
+- After login, regular reads and refreshes should not need passwords or Touch ID prompts.
 
 ## Important legal / brand notice
 
@@ -42,7 +44,7 @@ Secrets are local-only:
 - Package: `@andreasnlarsen/whoop-cli`
 - Releases are published via GitHub Actions trusted publishing (OIDC) with npm provenance.
 - This integration is unofficial and not affiliated with Whoop, Inc.
-- Never paste OAuth client secrets/tokens into chat. Run login locally and let the CLI store secrets in macOS Keychain.
+- Never paste long-lived OAuth client secrets/tokens into chat. Use Keychain on macOS, 1Password on Linux/OpenClaw, or explicitly acknowledged `local-vps` storage for simple locked-down VPS setups.
 - Verify install quickly:
   - `npx -y @andreasnlarsen/whoop-cli --help`
   - `whoop auth status --json`
@@ -156,7 +158,31 @@ whoop auth login
 
 For scripted setup only, you can provide `--client-id`, `--client-secret`, and `--redirect-uri`, or inject `WHOOP_CLIENT_ID`, `WHOOP_CLIENT_SECRET`, and `WHOOP_REDIRECT_URI` for that one command. Do not keep real secrets in shell startup files, checked-in `.env` files, or shared docs.
 
-The CLI stores the client secret and OAuth tokens in macOS Keychain under the `whoop-cli` service. The profile JSON on disk keeps only metadata. Keychain access uses macOS Security APIs through `/usr/bin/swift` so secret values are passed over stdin instead of command-line arguments. If `/usr/bin/swift` is unavailable, install Apple Command Line Tools with `xcode-select --install`, then retry.
+Secret storage is selected with `--secret-storage`:
+
+- `auto` (default): macOS uses Keychain. Linux uses 1Password only when `--op-vault` and `--op-item` or `WHOOP_OP_VAULT` and `WHOOP_OP_ITEM` are configured; otherwise it fails with setup guidance.
+- `macos-keychain`: stores the client secret and OAuth tokens in macOS Keychain under the `whoop-cli` service. Keychain access uses macOS Security APIs through `/usr/bin/swift` so secret values are passed over stdin instead of command-line arguments.
+- `onepassword`: stores rotating WHOOP secrets in a 1Password item using the `op` CLI. Use this for Linux/OpenClaw VPSes with a 1Password service account.
+- `local-vps`: explicit Linux VPS fallback that stores secrets in `~/.whoop-cli/secrets/<profile>.json` with `0600` permissions. It requires `--accept-local-vps-risk` and protects against accidental repo/chat/log exposure, not VPS compromise.
+
+Example Linux/OpenClaw 1Password setup:
+
+```bash
+whoop auth login \
+  --secret-storage onepassword \
+  --op-vault "Ops" \
+  --op-item "WHOOP default"
+```
+
+Example Telegram-only/simple VPS setup:
+
+```bash
+whoop auth login \
+  --secret-storage local-vps \
+  --accept-local-vps-risk
+```
+
+The profile JSON on disk keeps only metadata. If `/usr/bin/swift` is unavailable for macOS Keychain, install Apple Command Line Tools with `xcode-select --install`, then retry.
 
 If a sandboxed agent shell cannot access macOS Keychain, rerun the command from a normal Terminal or with unsandboxed execution. Do not switch to command-line secret arguments as a workaround.
 
@@ -213,7 +239,7 @@ Then open the printed URL manually in your browser.
 
 ## For non-technical users
 
-If an agent/dev is installing for you, send them these 3 values only:
+If an agent/dev is installing for you, provide these 3 values through a secure channel or an approved secret manager:
 1. Client ID
 2. Client Secret
 3. Redirect URI
@@ -235,15 +261,19 @@ whoop day-brief --json --pretty
 whoop auth status --json
 ```
 
-2. If not authenticated, help the user run `whoop auth login` locally. Prefer the interactive hidden client-secret prompt; use a one-time env/secret-manager injection only when automation requires it.
-3. Validate with:
+2. If not authenticated, help the user run `whoop auth login` with the right storage mode:
+   - macOS: default `auto`/Keychain.
+   - Linux/OpenClaw recurring use: `--secret-storage onepassword --op-vault ... --op-item ...`.
+   - Telegram-only simple VPS: `--secret-storage local-vps --accept-local-vps-risk`.
+3. Do not send long-lived 1Password service-account tokens through Telegram. For simple `local-vps` setup, the expected Telegram handoff is the short-lived WHOOP OAuth auth URL and redirected callback URL.
+4. Validate with:
 
 ```bash
 whoop profile show --json
 whoop day-brief --json
 ```
 
-4. For unattended systems, schedule:
+5. For unattended systems, schedule:
 
 ```bash
 scripts/whoop-refresh-monitor.sh
@@ -354,7 +384,9 @@ Exit codes:
 
 ## Security
 
-- macOS Keychain stores the WHOOP client secret, access token, and refresh token
+- macOS Keychain stores the WHOOP client secret, access token, and refresh token on macOS
+- 1Password service-account storage is the preferred Linux/OpenClaw VPS backend
+- `local-vps` is an explicit Linux fallback with `0700` secret directory and `0600` secret files
 - `~/.whoop-cli/profiles/<name>.json` stores non-secret metadata with strict file permissions
 - Refresh-token flow supported for automation
 - CLI avoids printing secrets by default

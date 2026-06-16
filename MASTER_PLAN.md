@@ -76,7 +76,7 @@ Priority legend:
 ### JTBD-01 (P0)
 **When I wake up, help me decide whether to push hard or recover today.**
 - CLI needs: latest recovery, latest sleep, latest cycle strain
-- Command target: `whoop day brief`
+- Command target: `whoop day-brief`
 - OpenClaw help: convert to concrete day plan (high/moderate/rest)
 
 ### JTBD-02 (P0)
@@ -110,13 +110,13 @@ Priority legend:
 ### JTBD-06 (P0)
 **Compare yesterday’s strain vs recovery and suggest today’s load.**
 - CLI needs: cycle + recovery join
-- Command target: `whoop strain plan`
+- Command target: `whoop strain-plan`
 - OpenClaw help: map to specific workout intensity choices
 
 ### JTBD-07 (P1)
 **List workout load trend to prevent overreaching streaks.**
 - CLI needs: workout/cycle trend view
-- Command target: `whoop workout trend --days 14`
+- Command target: `whoop activity trend --days 14`
 - OpenClaw help: proactive deload suggestion
 
 ## D) Behavior experiments (Journal-driven)
@@ -196,14 +196,14 @@ Priority legend:
 - `whoop sleep latest`
 - `whoop cycle latest`
 - `whoop summary`
-- `whoop day brief`
+- `whoop day-brief`
 - `whoop sync pull --start --end --out`
 
 ## Phase 2 (P1 value acceleration)
 
 - `whoop sleep trend --days`
-- `whoop workout trend --days`
-- `whoop strain plan`
+- `whoop activity trend --days`
+- `whoop strain-plan`
 - `whoop health flags`
 - `whoop behavior impacts`
 - `whoop webhook verify`
@@ -224,7 +224,7 @@ Skill: `skills/whoop-cli/`
 Primary usage loops:
 
 1. **Morning loop**
-   - `whoop day brief --json`
+   - `whoop day-brief --json`
    - Agent generates today’s plan + reminders
 
 2. **Evening loop**
@@ -252,7 +252,12 @@ Primary usage loops:
 - Token refresh single-flight lock
 - Safe retries/backoff for transient API failures
 - Redacted logs (never print secrets)
-- Strict file perms for token cache
+- Profile JSON stores non-secret metadata only
+- Secret storage is explicit and cross-platform:
+  - macOS default: Keychain
+  - Linux/OpenClaw preferred: 1Password CLI/service account
+  - Linux/OpenClaw simple fallback: acknowledged `local-vps`
+- Strict file permissions for local metadata and explicit `local-vps` secret files
 
 ---
 
@@ -266,20 +271,18 @@ Audience:
 
 Differentiation:
 - **agent-first CLI contracts** (not just human output)
-- **decision-oriented commands** (`day brief`, `health flags`, `strain plan`)
+- **decision-oriented commands** (`day-brief`, `health flags`, `strain-plan`)
 - **first-class OpenClaw skill support**
 
 ---
 
-## 8) Immediate execution plan (next 7 steps)
+## 8) Current execution focus
 
-1. Implement auth module (`login/status/refresh`) with refresh lock
-2. Implement typed HTTP client + pagination helper
-3. Implement `profile show`, `recovery latest`, `sleep latest`, `cycle latest`
-4. Implement `summary` and `day brief` from core metrics
-5. Implement `sync pull` export (JSONL)
-6. Add tests for auth refresh race + envelope stability
-7. Publish first alpha + wire OpenClaw skill commands
+1. Keep auth/storage reliable across macOS Keychain, Linux 1Password, and explicit `local-vps`
+2. Keep agent-facing docs and bundled skill examples aligned with current commands
+3. Preserve stable JSON envelopes and deterministic exit codes as commands evolve
+4. Maintain token refresh reliability for cron, OpenClaw, and other unattended agent workflows
+5. Continue expanding decision-oriented commands from raw WHOOP metrics toward daily guidance
 
 ---
 

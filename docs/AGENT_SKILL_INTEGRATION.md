@@ -44,6 +44,12 @@ whoop sync pull --start 2026-02-01 --end 2026-02-07 --out ./whoop-week.jsonl --j
 
 Use `scripts/whoop-refresh-monitor.sh` every 30-60 minutes for unattended setups.
 
+Auth storage guidance:
+- macOS defaults to Keychain and should not require repeated Touch ID/password prompts for normal reads.
+- Linux/OpenClaw recurring deployments should use `whoop auth login --secret-storage onepassword --op-vault ... --op-item ...` with `op` already authenticated by a service account or deployment environment.
+- Telegram-only/simple VPS setup can use `whoop auth login --secret-storage local-vps --accept-local-vps-risk`.
+- Do not send long-lived 1Password service-account tokens through Telegram. For `local-vps`, the expected Telegram handoff is the short-lived WHOOP OAuth auth URL and redirected callback URL.
+
 ## Skill install targets
 
 Default local agent/Codex setup:
@@ -69,6 +75,6 @@ whoop skill install --target path --skill-dir /path/to/skills/whoop-cli --force
 ## Suggested agent skill usage flow
 
 1. `whoop auth status --json`
-2. if unauthenticated: instruct user to run `whoop auth login`
+2. if unauthenticated: instruct the user to run `whoop auth login` with the storage mode that matches the machine
 3. run requested command with `--json`
 4. summarize in plain language + next action

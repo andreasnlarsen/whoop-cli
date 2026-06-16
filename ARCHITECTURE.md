@@ -49,6 +49,10 @@ src/
     envelope.ts
   store/
     keychain-secret-store.ts
+    local-vps-secret-store.ts
+    onepassword-secret-store.ts
+    profile-secret-store.ts
+    profile-secret-store-selector.ts
     profile-store.ts
   util/
     activity.ts
@@ -63,6 +67,11 @@ src/
 test/
   activity-utils.test.ts
   envelope.test.ts
+  keychain-secret-store.test.ts
+  local-vps-secret-store.test.ts
+  onepassword-secret-store.test.ts
+  profile-store.test.ts
+  secret-storage-selector.test.ts
   time.test.ts
   webhook-signature.test.ts
 ```
@@ -75,8 +84,13 @@ test/
 - CLI exchanges code at WHOOP token endpoint.
 
 ### Token handling
-- macOS Keychain stores the WHOOP client secret, access token, and refresh token under service `whoop-cli`
+- `ProfileSecretStore` is the narrow secret interface for client secrets, access tokens, and refresh tokens
+- `profile-secret-store-selector.ts` is the canonical owner for backend routing
+- macOS `auto` uses Keychain under service `whoop-cli`
+- Linux `auto` uses 1Password only when `--op-vault`/`--op-item` or `WHOOP_OP_VAULT`/`WHOOP_OP_ITEM` are configured; otherwise it fails with setup choices
+- Explicit Linux `local-vps` stores secrets in `~/.whoop-cli/secrets/<profile>.json` only after risk acknowledgement
 - Keychain access uses macOS Security APIs through `/usr/bin/swift`; write values are passed over stdin instead of command-line arguments
+- 1Password access uses the installed `op` CLI and writes JSON templates through stdin instead of secret-bearing command arguments
 - If `/usr/bin/swift` is unavailable, the CLI reports the missing Apple Command Line Tools prerequisite instead of falling back to command-line secret arguments
 - If a sandboxed agent process cannot access macOS Keychain, rerun the CLI with normal user permissions instead of falling back to secret-bearing command-line arguments
 - Profile JSON at `~/.whoop-cli/profiles/<name>.json` stores metadata only
@@ -144,7 +158,8 @@ Exit codes:
 ## 7) Security
 
 - never log secrets intentionally
-- persistent secrets live in macOS Keychain instead of profile JSON
+- persistent secrets live in macOS Keychain, 1Password, or explicit `local-vps` storage instead of profile JSON
+- `local-vps` is a deliberate lower-security Linux fallback with `0700` secret directory and `0600` secret files; it protects against accidental repo/chat/log exposure, not VPS compromise
 - profile metadata persistence uses strict file permissions
 - OAuth login requires full redirect URL input so `state` can be checked
 - JSON error details redact fields that look like secrets, tokens, authorization headers, or cookies
