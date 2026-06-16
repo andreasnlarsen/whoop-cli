@@ -87,7 +87,7 @@ test/
 - `ProfileSecretStore` is the narrow secret interface for client secrets, access tokens, and refresh tokens
 - `profile-secret-store-selector.ts` is the canonical owner for backend routing
 - macOS `auto` uses Keychain under service `whoop-cli`
-- Linux `auto` uses 1Password only when `--op-vault`/`--op-item` or `WHOOP_OP_VAULT`/`WHOOP_OP_ITEM` are configured; otherwise it fails with setup choices
+- Linux `auto` preserves an existing supported backend; explicit `--op-vault`/`--op-item` retargets to 1Password, and `WHOOP_OP_VAULT`/`WHOOP_OP_ITEM` configure 1Password when no supported backend is already stored. Without those choices, Linux `auto` fails with setup choices
 - Explicit Linux `local-vps` stores secrets in `~/.whoop-cli/secrets/<profile>.json` only after risk acknowledgement
 - Keychain access uses macOS Security APIs through `/usr/bin/swift`; write values are passed over stdin instead of command-line arguments
 - 1Password access uses the installed `op` CLI and writes JSON templates through stdin instead of secret-bearing command arguments

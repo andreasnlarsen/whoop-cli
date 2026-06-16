@@ -160,7 +160,7 @@ For scripted setup only, you can provide `--client-id`, `--client-secret`, and `
 
 Secret storage is selected with `--secret-storage`:
 
-- `auto` (default): macOS uses Keychain. Linux uses 1Password only when `--op-vault` and `--op-item` or `WHOOP_OP_VAULT` and `WHOOP_OP_ITEM` are configured; otherwise it fails with setup guidance.
+- `auto` (default): macOS uses Keychain. Linux preserves an existing supported backend; explicit `--op-vault` and `--op-item` retarget to 1Password, and `WHOOP_OP_VAULT`/`WHOOP_OP_ITEM` configure 1Password when no supported backend is already stored. Without those choices, Linux auto fails with setup guidance.
 - `macos-keychain`: stores the client secret and OAuth tokens in macOS Keychain under the `whoop-cli` service. Keychain access uses macOS Security APIs through `/usr/bin/swift` so secret values are passed over stdin instead of command-line arguments.
 - `onepassword`: stores rotating WHOOP secrets in a 1Password item using the `op` CLI. Use this for Linux/OpenClaw VPSes with a 1Password service account.
 - `local-vps`: explicit Linux VPS fallback that stores secrets in `~/.whoop-cli/secrets/<profile>.json` with `0600` permissions. It requires `--accept-local-vps-risk` and protects against accidental repo/chat/log exposure, not VPS compromise.
