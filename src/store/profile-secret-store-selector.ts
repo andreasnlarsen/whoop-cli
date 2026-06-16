@@ -135,8 +135,13 @@ export const resolveLoginProfileSecretStore = (
 ): ResolvedProfileSecretStore => {
   const requested = parseSecretStorageSelection(opts.requested);
   const platform = opts.platform ?? process.platform;
+  const hasExplicitOnePasswordSelector = opts.opVault !== undefined || opts.opItem !== undefined;
 
   if (requested === 'auto') {
+    if (platform === 'linux' && hasExplicitOnePasswordSelector) {
+      return onePasswordResult(onePasswordConfigFrom(opts));
+    }
+
     const existing = resolveSupportedStoredProfileSecretStore(opts.existing, { platform });
     if (existing) {
       return existing;

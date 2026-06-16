@@ -55,6 +55,54 @@ test('secret storage selection preserves stored local-vps backend when login use
   assert.equal(resolved.store.kind, 'local-vps');
 });
 
+test('secret storage selection lets explicit Linux auto 1Password selectors retarget an existing item', () => {
+  const resolved = resolveLoginProfileSecretStore({
+    requested: 'auto',
+    platform: 'linux',
+    existing: {
+      secretStorage: 'onepassword',
+      secretStorageConfig: {
+        onePassword: {
+          vault: 'Old Ops',
+          item: 'Old WHOOP',
+        },
+      },
+    },
+    opVault: 'New Ops',
+    opItem: 'New WHOOP',
+    env: {},
+  });
+
+  assert.equal(resolved.secretStorage, 'onepassword');
+  assert.deepEqual(resolved.secretStorageConfig, {
+    onePassword: {
+      vault: 'New Ops',
+      item: 'New WHOOP',
+    },
+  });
+});
+
+test('secret storage selection lets explicit Linux auto 1Password selectors replace local-vps', () => {
+  const resolved = resolveLoginProfileSecretStore({
+    requested: 'auto',
+    platform: 'linux',
+    existing: {
+      secretStorage: 'local-vps',
+    },
+    opVault: 'Ops',
+    opItem: 'WHOOP default',
+    env: {},
+  });
+
+  assert.equal(resolved.secretStorage, 'onepassword');
+  assert.deepEqual(resolved.secretStorageConfig, {
+    onePassword: {
+      vault: 'Ops',
+      item: 'WHOOP default',
+    },
+  });
+});
+
 test('secret storage selection ignores unsupported stored Keychain backend on Linux auto', () => {
   const resolved = resolveLoginProfileSecretStore({
     requested: 'auto',
