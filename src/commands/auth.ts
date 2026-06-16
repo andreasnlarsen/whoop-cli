@@ -5,16 +5,19 @@ import { buildAuthUrl, exchangeAuthCode, generateState, parseAuthInput } from '.
 import { getGlobalOptions, printData, printError } from './context.js';
 import {
   loadProfile,
-  loadProfileClientSecret,
   loadProfileMetadata,
   saveProfile,
   clearProfileTokens,
-  assertProfileSecretStorageSupported,
   preflightProfileSecretStorage,
   type WhoopProfile,
 } from '../store/profile-store.js';
+import {
+  resolveLoginProfileSecretStore,
+  resolveSupportedStoredProfileSecretStore,
+} from '../store/profile-secret-store-selector.js';
 import { tokenFromOAuth, refreshProfileToken } from '../auth/token-service.js';
 import { configError, usageError } from '../http/errors.js';
+import type { ProfileSecretStore, SecretStorageSelection, StoredSecretStorageConfig } from '../store/profile-secret-store.js';
 
 const DEFAULT_SCOPES = [
   'read:recovery',
@@ -42,9 +45,46 @@ export const resolveLoginState = (providedState: string | undefined, hasCodeInpu
   return providedState ?? generateState();
 };
 
-const resolveClientConfig = async (
+const sameOnePasswordConfig = (
+  a: StoredSecretStorageConfig | undefined,
+  b: StoredSecretStorageConfig | undefined,
+): boolean =>
+  a?.onePassword?.vault === b?.onePassword?.vault
+  && a?.onePassword?.item === b?.onePassword?.item;
+
+const sameSecretStorageTarget = (
+  existing: Awaited<ReturnType<typeof loadProfileMetadata>>,
+  secretStorage: {
+    kind: WhoopProfile['secretStorage'];
+    config?: StoredSecretStorageConfig;
+  },
+): boolean =>
+  Boolean(existing)
+  && existing?.secretStorage === secretStorage.kind
+  && sameOnePasswordConfig(existing.secretStorageConfig, secretStorage.config);
+
+const readProfileSecretBestEffort = async (
+  store: ProfileSecretStore,
+  profileName: string,
+  name: 'clientSecret' | 'refreshToken',
+): Promise<string | undefined> => {
+  try {
+    return await store.get(profileName, name);
+  } catch {
+    return undefined;
+  }
+};
+
+export const resolveClientConfig = async (
   profileName: string,
   baseUrl: string,
+  existing: Awaited<ReturnType<typeof loadProfileMetadata>>,
+  secretStore: ProfileSecretStore,
+  previousSecretStore: ProfileSecretStore | undefined,
+  secretStorage: {
+    kind: WhoopProfile['secretStorage'];
+    config?: StoredSecretStorageConfig;
+  },
   overrides: {
     clientId?: string;
     clientSecret?: string;
@@ -53,13 +93,16 @@ const resolveClientConfig = async (
   },
   interactive: boolean,
 ): Promise<WhoopProfile> => {
-  const existing = await loadProfileMetadata(profileName);
-
   let clientId = overrides.clientId ?? process.env.WHOOP_CLIENT_ID ?? existing?.clientId;
   let clientSecret = overrides.clientSecret ?? process.env.WHOOP_CLIENT_SECRET;
   let redirectUri = overrides.redirectUri ?? process.env.WHOOP_REDIRECT_URI ?? existing?.redirectUri;
+  const isExistingTarget = sameSecretStorageTarget(existing, secretStorage);
   if (!clientSecret && existing) {
-    clientSecret = await loadProfileClientSecret(profileName);
+    clientSecret = isExistingTarget
+      ? await secretStore.get(profileName, 'clientSecret')
+      : previousSecretStore
+        ? await readProfileSecretBestEffort(previousSecretStore, profileName, 'clientSecret')
+        : undefined;
   }
 
   if (interactive && canPrompt()) {
@@ -83,7 +126,48 @@ const resolveClientConfig = async (
     scopes: splitScopes(overrides.scopes ?? existing?.scopes?.join(' ')),
     createdAt: existing?.createdAt ?? new Date().toISOString(),
     updatedAt: new Date().toISOString(),
+    secretStorage: secretStorage.kind,
+    secretStorageConfig: secretStorage.config,
   };
+};
+
+export const loadLoginRefreshTokenFallback = async (
+  profileName: string,
+  existing: Awaited<ReturnType<typeof loadProfileMetadata>>,
+  selectedSecretStore: ProfileSecretStore,
+  previousSecretStore: ProfileSecretStore | undefined,
+  selectedSecretStorage: {
+    kind: WhoopProfile['secretStorage'];
+    config?: StoredSecretStorageConfig;
+  },
+): Promise<string | undefined> => {
+  if (!existing?.tokens?.hasRefreshToken) {
+    return undefined;
+  }
+
+  if (sameSecretStorageTarget(existing, selectedSecretStorage)) {
+    return selectedSecretStore.get(profileName, 'refreshToken');
+  }
+
+  return previousSecretStore
+    ? readProfileSecretBestEffort(previousSecretStore, profileName, 'refreshToken')
+    : undefined;
+};
+
+const LOCAL_VPS_RISK_PROMPT =
+  'local-vps stores WHOOP secrets in a local 0600 file. It protects against accidental repo/chat/log exposure, not against VPS compromise. Type local-vps to continue: ';
+
+const resolveLocalVpsRiskAcceptance = async (
+  requested: SecretStorageSelection,
+  accepted: boolean,
+  interactive: boolean,
+): Promise<boolean> => {
+  if (accepted || requested !== 'local-vps' || !interactive || !canPrompt()) {
+    return accepted;
+  }
+
+  const answer = (await ask(LOCAL_VPS_RISK_PROMPT)).trim();
+  return answer === 'local-vps';
 };
 
 export const registerAuthCommands = (program: Command): void => {
@@ -96,15 +180,37 @@ export const registerAuthCommands = (program: Command): void => {
     .option('--client-secret <secret>')
     .option('--redirect-uri <url>')
     .option('--scopes <scopes>', 'space/comma separated scopes')
+    .option('--secret-storage <mode>', 'secret storage: auto, macos-keychain, onepassword, or local-vps', 'auto')
+    .option('--op-vault <vault>', '1Password vault for WHOOP secrets')
+    .option('--op-item <item>', '1Password item for WHOOP secrets')
+    .option('--accept-local-vps-risk', 'acknowledge local-vps storage risk for Linux VPS setups', false)
     .option('--code <url>', 'full redirect URL (requires --state; skip prompt)')
     .option('--state <state>', 'expected OAuth state; required with --code')
     .option('--no-open', 'do not attempt to open browser')
     .action(async function loginAction(opts) {
       try {
         const globals = getGlobalOptions(this);
-        assertProfileSecretStorageSupported();
-        await preflightProfileSecretStorage(globals.profile);
-        const profile = await resolveClientConfig(globals.profile, globals.baseUrl, {
+        const existing = await loadProfileMetadata(globals.profile);
+        const requestedStorage = opts.secretStorage as SecretStorageSelection;
+        const acceptLocalVpsRisk = await resolveLocalVpsRiskAcceptance(
+          requestedStorage,
+          Boolean(opts.acceptLocalVpsRisk),
+          !globals.json,
+        );
+        const secretStore = resolveLoginProfileSecretStore({
+          requested: requestedStorage,
+          existing,
+          opVault: opts.opVault,
+          opItem: opts.opItem,
+          acceptLocalVpsRisk,
+          env: process.env,
+        });
+        secretStore.store.assertSupported?.();
+        const previousSecretStore = resolveSupportedStoredProfileSecretStore(existing)?.store ?? undefined;
+        const profile = await resolveClientConfig(globals.profile, globals.baseUrl, existing, secretStore.store, previousSecretStore, {
+          kind: secretStore.secretStorage,
+          config: secretStore.secretStorageConfig,
+        }, {
           clientId: opts.clientId,
           clientSecret: opts.clientSecret,
           redirectUri: opts.redirectUri,
@@ -112,23 +218,7 @@ export const registerAuthCommands = (program: Command): void => {
         }, !globals.json);
 
         const state = resolveLoginState(opts.state, Boolean(opts.code));
-        const authUrl = buildAuthUrl(
-          {
-            clientId: profile.clientId,
-            clientSecret: profile.clientSecret,
-            redirectUri: profile.redirectUri,
-            baseUrl: profile.baseUrl,
-          },
-          profile.scopes,
-          state,
-        );
-
-        let openAttempted = false;
-        if (!opts.code && opts.open !== false) {
-          openAttempted = await tryOpenBrowser(authUrl);
-        }
-
-        let code: string | undefined;
+        let code: string;
         if (opts.code) {
           const parsed = parseAuthInput(String(opts.code));
           code = parsed.code;
@@ -139,6 +229,21 @@ export const registerAuthCommands = (program: Command): void => {
             });
           }
         } else {
+          await preflightProfileSecretStorage(globals.profile, secretStore.store);
+          const authUrl = buildAuthUrl(
+            {
+              clientId: profile.clientId,
+              clientSecret: profile.clientSecret,
+              redirectUri: profile.redirectUri,
+              baseUrl: profile.baseUrl,
+            },
+            profile.scopes,
+            state,
+          );
+          const openAttempted = opts.open !== false
+            ? await tryOpenBrowser(authUrl)
+            : false;
+
           if (!globals.json) {
             console.log('Open this URL and authorize access:');
             console.log(authUrl);
@@ -156,6 +261,10 @@ export const registerAuthCommands = (program: Command): void => {
           }
         }
 
+        if (opts.code) {
+          await preflightProfileSecretStorage(globals.profile, secretStore.store);
+        }
+
         const tokenPayload = await exchangeAuthCode(
           {
             clientId: profile.clientId,
@@ -166,10 +275,13 @@ export const registerAuthCommands = (program: Command): void => {
           code,
         );
 
-        const previousProfile = tokenPayload.refresh_token
+        const previousRefreshToken = tokenPayload.refresh_token
           ? undefined
-          : await loadProfile(globals.profile);
-        profile.tokens = tokenFromOAuth(tokenPayload, previousProfile?.tokens?.refreshToken);
+          : await loadLoginRefreshTokenFallback(globals.profile, existing, secretStore.store, previousSecretStore, {
+            kind: secretStore.secretStorage,
+            config: secretStore.secretStorageConfig,
+          });
+        profile.tokens = tokenFromOAuth(tokenPayload, previousRefreshToken);
         await saveProfile(globals.profile, profile);
 
         printData(this, {
@@ -177,7 +289,7 @@ export const registerAuthCommands = (program: Command): void => {
           authenticated: true,
           scopes: profile.scopes,
           expiresAt: profile.tokens.expiresAt,
-          secretStorage: 'macos-keychain',
+          secretStorage: profile.secretStorage,
         });
       } catch (err) {
         printError(this, err);
@@ -196,7 +308,7 @@ export const registerAuthCommands = (program: Command): void => {
             profile: globals.profile,
             authenticated: false,
             configured: Boolean(profile?.clientId && profile.clientSecret && profile.redirectUri),
-            secretStorage: 'macos-keychain',
+            secretStorage: profile?.secretStorage ?? null,
           });
           return;
         }
@@ -213,7 +325,7 @@ export const registerAuthCommands = (program: Command): void => {
           expiresAt: profile.tokens.expiresAt,
           expiresInSeconds: remainingSeconds,
           hasRefreshToken: Boolean(profile.tokens.refreshToken),
-          secretStorage: 'macos-keychain',
+          secretStorage: profile.secretStorage,
         });
       } catch (err) {
         printError(this, err);
@@ -231,6 +343,7 @@ export const registerAuthCommands = (program: Command): void => {
           profile: globals.profile,
           refreshed: true,
           expiresAt: profile.tokens?.expiresAt,
+          secretStorage: profile.secretStorage,
         });
       } catch (err) {
         printError(this, err);
@@ -243,10 +356,12 @@ export const registerAuthCommands = (program: Command): void => {
     .action(async function logoutAction() {
       try {
         const globals = getGlobalOptions(this);
+        const metadata = await loadProfileMetadata(globals.profile);
         await clearProfileTokens(globals.profile);
         printData(this, {
           profile: globals.profile,
           loggedOut: true,
+          secretStorage: metadata?.secretStorage ?? null,
         });
       } catch (err) {
         printError(this, err);

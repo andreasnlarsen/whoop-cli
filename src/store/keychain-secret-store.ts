@@ -4,16 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { configError } from '../http/errors.js';
 import { sanitizeProfileName } from '../util/config.js';
-
-export type ProfileSecretName = 'clientSecret' | 'accessToken' | 'refreshToken';
-
-export interface ProfileSecretStore {
-  assertSupported?: () => void;
-  preflightWrite?: (profileName: string) => Promise<void>;
-  get(profileName: string, name: ProfileSecretName): Promise<string | undefined>;
-  set(profileName: string, name: ProfileSecretName, value: string): Promise<void>;
-  delete(profileName: string, name: ProfileSecretName): Promise<void>;
-}
+import type { ProfileSecretName, ProfileSecretStore } from './profile-secret-store.js';
 
 export interface KeychainCommandResult {
   stdout: string;
@@ -217,6 +208,7 @@ export const createKeychainProfileSecretStore = (
   };
 
   return {
+    kind: 'macos-keychain',
     assertSupported,
 
     async preflightWrite(profileName) {

@@ -1,6 +1,6 @@
 ---
 name: whoop-cli
-description: Use when operating the installed `whoop` CLI for agent-friendly WHOOP access, local Keychain-backed auth checks, daily briefs, summaries, health flags, activity trends, exports, or installing the bundled WHOOP agent skill into `~/.agents`, Codex, OpenClaw, or another agent skill directory.
+description: Use when operating the installed `whoop` CLI for agent-friendly WHOOP access, cross-platform secret storage checks, daily briefs, summaries, health flags, activity trends, exports, or installing the bundled WHOOP agent skill into `~/.agents`, Codex, OpenClaw, or another agent skill directory.
 metadata:
   openclaw:
     requires:
@@ -21,15 +21,19 @@ Use the installed `whoop` command.
 
 ## Security + Credential Handling
 
-- Never ask users to paste client secrets or tokens into chat.
+- Never ask users to paste long-lived client secrets or tokens into chat.
 - For first-time auth, have the user run login locally in their own shell.
-- The CLI stores the WHOOP client secret, access token, and refresh token in macOS Keychain.
+- macOS default secret storage is macOS Keychain.
+- Linux/OpenClaw preferred secret storage is 1Password CLI with a service account.
+- Linux/OpenClaw simple fallback is explicit `local-vps` storage with `--accept-local-vps-risk`.
 - Profile JSON at `~/.whoop-cli/profiles/<profile>.json` stores non-secret metadata only.
 - Keychain access uses macOS Security APIs through `/usr/bin/swift`; do not replace this with command-line secret arguments.
 - If `/usr/bin/swift` is unavailable, tell the user to install Apple Command Line Tools with `xcode-select --install`.
 - If a sandboxed agent shell cannot access macOS Keychain, rerun the `whoop` command with normal user permissions; do not use secret-bearing command-line arguments as a fallback.
-- After login, regular read commands should not need env vars, 1Password prompts, passwords, or Touch ID.
+- After login, regular read commands should not need passwords or Touch ID.
 - If macOS asks for "password data for new item" during login, stop and update or reinstall `whoop`; the CLI should write Keychain items non-interactively.
+- On Linux, do not silently fall back to plaintext profile JSON. Use `onepassword` or explicit `local-vps`.
+- Do not send long-lived 1Password service-account tokens through Telegram. In simple `local-vps` setup, the expected Telegram handoff is the short-lived WHOOP auth URL and redirected callback URL.
 - Prefer read-only operational commands in agent flows: `summary`, `day-brief`, `health`, `trend`, and `sync pull`.
 - Do not run `whoop auth login` unless the user explicitly asks for login help.
 
@@ -65,8 +69,10 @@ whoop skill install --target path --skill-dir /path/to/skills/whoop-cli --force
 
 1. `whoop auth status --json`
 2. If unauthenticated, ask the user to run local login:
-   - `whoop auth login`
-   - Prefer the interactive hidden client-secret prompt.
+   - macOS: `whoop auth login`
+   - Linux/OpenClaw recommended: `whoop auth login --secret-storage onepassword --op-vault ... --op-item ...`
+   - Telegram-only/simple Linux VPS: `whoop auth login --secret-storage local-vps --accept-local-vps-risk`
+   - Prefer the interactive hidden client-secret prompt when a human is present.
    - Use one-time env/secret-manager injection only when automation requires it.
 3. Validate:
    - `whoop summary --json --pretty`
@@ -122,5 +128,6 @@ whoop activity list --days 30 --json | jq '.data.records | map(select(.sport_id 
 ## Safety
 
 - Never print client secrets or raw tokens.
+- Treat `local-vps` as a deliberate lower-security mode: it prevents accidental repo/chat/log exposure but not VPS compromise.
 - Keep API errors concise and actionable.
 - Treat this integration as unofficial and not affiliated with WHOOP.
