@@ -172,9 +172,9 @@ Priority legend:
 
 ### JTBD-14 (P0)
 **Keep auth alive without babysitting token expiry.**
-- CLI needs: robust refresh + lock + clear status
+- CLI needs: automatic refresh for every data command + cross-process lock + clear status
 - Command target: `whoop auth login/status/refresh`
-- OpenClaw help: cron-based preemptive refresh checks
+- OpenClaw help: use normal data commands; add scheduled refresh only as an optional health check
 
 ### JTBD-15 (P0)
 **Ensure every command is agent-safe in pipelines.**
@@ -219,7 +219,7 @@ Priority legend:
 
 ## 5) OpenClaw skill strategy
 
-Skill: `skills/whoop-cli/`
+Bundled skill: `agent-skill/SKILL.md`
 
 Primary usage loops:
 
@@ -249,7 +249,9 @@ Primary usage loops:
   - `2` usage/config
   - `3` auth
   - `4` api/network
-- Token refresh single-flight lock
+- Per-profile token refresh queue plus crash-safe cross-process locks on macOS, Linux, and Windows
+- Automatic proactive refresh for WHOOP API data commands plus one coordinated retry after a `401`
+- Commit-aware rotated refresh-token persistence
 - Safe retries/backoff for transient API failures
 - Redacted logs (never print secrets)
 - Profile JSON stores non-secret metadata only
@@ -257,6 +259,7 @@ Primary usage loops:
   - macOS default: Keychain
   - Linux/OpenClaw preferred: 1Password CLI/service account
   - Linux/OpenClaw simple fallback: acknowledged `local-vps`
+  - Windows: explicit 1Password storage
 - Strict file permissions for local metadata and explicit `local-vps` secret files
 
 ---
@@ -278,10 +281,10 @@ Differentiation:
 
 ## 8) Current execution focus
 
-1. Keep auth/storage reliable across macOS Keychain, Linux 1Password, and explicit `local-vps`
+1. Keep auth/storage reliable across macOS Keychain, Linux and Windows 1Password, and explicit Linux `local-vps`
 2. Keep agent-facing docs and bundled skill examples aligned with current commands
 3. Preserve stable JSON envelopes and deterministic exit codes as commands evolve
-4. Maintain token refresh reliability for cron, OpenClaw, and other unattended agent workflows
+4. Maintain automatic, cross-process token refresh reliability for cron, OpenClaw, and other unattended agent workflows
 5. Continue expanding decision-oriented commands from raw WHOOP metrics toward daily guidance
 
 ---

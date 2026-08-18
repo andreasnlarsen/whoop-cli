@@ -15,9 +15,10 @@ import {
   resolveLoginProfileSecretStore,
   resolveSupportedStoredProfileSecretStore,
 } from '../store/profile-secret-store-selector.js';
-import { tokenFromOAuth, refreshProfileToken } from '../auth/token-service.js';
+import { isTokenExpired, refreshProfileToken, tokenFromOAuth } from '../auth/token-service.js';
 import { configError, usageError } from '../http/errors.js';
 import type { ProfileSecretStore, SecretStorageSelection, StoredSecretStorageConfig } from '../store/profile-secret-store.js';
+import { withProfileAuthLock } from '../auth/refresh-lock.js';
 
 const DEFAULT_SCOPES = [
   'read:recovery',
@@ -265,30 +266,33 @@ export const registerAuthCommands = (program: Command): void => {
           await preflightProfileSecretStorage(globals.profile, secretStore.store);
         }
 
-        const tokenPayload = await exchangeAuthCode(
-          {
-            clientId: profile.clientId,
-            clientSecret: profile.clientSecret,
-            redirectUri: profile.redirectUri,
-            baseUrl: profile.baseUrl,
-          },
-          code,
-        );
+        const tokens = await withProfileAuthLock(globals.profile, async () => {
+          const tokenPayload = await exchangeAuthCode(
+            {
+              clientId: profile.clientId,
+              clientSecret: profile.clientSecret,
+              redirectUri: profile.redirectUri,
+              baseUrl: profile.baseUrl,
+            },
+            code,
+          );
 
-        const previousRefreshToken = tokenPayload.refresh_token
-          ? undefined
-          : await loadLoginRefreshTokenFallback(globals.profile, existing, secretStore.store, previousSecretStore, {
-            kind: secretStore.secretStorage,
-            config: secretStore.secretStorageConfig,
+          const previousRefreshToken = tokenPayload.refresh_token
+            ? undefined
+            : await loadLoginRefreshTokenFallback(globals.profile, existing, secretStore.store, previousSecretStore, {
+              kind: secretStore.secretStorage,
+              config: secretStore.secretStorageConfig,
           });
-        profile.tokens = tokenFromOAuth(tokenPayload, previousRefreshToken);
-        await saveProfile(globals.profile, profile);
+          profile.tokens = tokenFromOAuth(tokenPayload, previousRefreshToken);
+          await saveProfile(globals.profile, profile);
+          return profile.tokens;
+        });
 
         printData(this, {
           profile: globals.profile,
           authenticated: true,
           scopes: profile.scopes,
-          expiresAt: profile.tokens.expiresAt,
+          expiresAt: tokens.expiresAt,
           secretStorage: profile.secretStorage,
         });
       } catch (err) {
@@ -315,16 +319,24 @@ export const registerAuthCommands = (program: Command): void => {
 
         const expiresAt = new Date(profile.tokens.expiresAt).getTime();
         const remainingSeconds = Math.max(0, Math.floor((expiresAt - Date.now()) / 1000));
+        const accessTokenExpired = isTokenExpired(profile.tokens, 0);
+        const hasRefreshToken = Boolean(profile.tokens.refreshToken);
 
         printData(this, {
           profile: globals.profile,
-          authenticated: true,
+          authenticated: !accessTokenExpired || hasRefreshToken,
+          authState: !accessTokenExpired
+            ? 'active'
+            : hasRefreshToken
+              ? 'refresh-required'
+              : 'login-required',
           baseUrl: profile.baseUrl,
           scopes: profile.scopes,
           tokenType: profile.tokens.tokenType,
           expiresAt: profile.tokens.expiresAt,
           expiresInSeconds: remainingSeconds,
-          hasRefreshToken: Boolean(profile.tokens.refreshToken),
+          accessTokenExpired,
+          hasRefreshToken,
           secretStorage: profile.secretStorage,
         });
       } catch (err) {
@@ -356,8 +368,11 @@ export const registerAuthCommands = (program: Command): void => {
     .action(async function logoutAction() {
       try {
         const globals = getGlobalOptions(this);
-        const metadata = await loadProfileMetadata(globals.profile);
-        await clearProfileTokens(globals.profile);
+        const metadata = await withProfileAuthLock(globals.profile, async () => {
+          const current = await loadProfileMetadata(globals.profile);
+          await clearProfileTokens(globals.profile);
+          return current;
+        });
         printData(this, {
           profile: globals.profile,
           loggedOut: true,

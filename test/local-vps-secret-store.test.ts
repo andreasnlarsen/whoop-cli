@@ -8,8 +8,10 @@ import { createLocalVpsProfileSecretStore } from '../src/store/local-vps-secret-
 
 const withTempHome = async (fn: (home: string) => Promise<void>): Promise<void> => {
   const originalHome = process.env.HOME;
+  const originalUserProfile = process.env.USERPROFILE;
   const home = await mkdtemp(join(tmpdir(), 'whoop-cli-local-vps-'));
   process.env.HOME = home;
+  process.env.USERPROFILE = home;
 
   try {
     await fn(home);
@@ -18,6 +20,11 @@ const withTempHome = async (fn: (home: string) => Promise<void>): Promise<void> 
       delete process.env.HOME;
     } else {
       process.env.HOME = originalHome;
+    }
+    if (originalUserProfile === undefined) {
+      delete process.env.USERPROFILE;
+    } else {
+      process.env.USERPROFILE = originalUserProfile;
     }
     await rm(home, { recursive: true, force: true });
   }
@@ -36,7 +43,7 @@ test('local-vps preflight requires explicit risk acknowledgement', async () => {
   });
 });
 
-test('local-vps store writes secrets to dedicated 0600 files', async () => {
+test('local-vps store writes secrets and enforces private modes where supported', async () => {
   await withTempHome(async () => {
     const store = createLocalVpsProfileSecretStore({
       platform: 'linux',
@@ -52,8 +59,10 @@ test('local-vps store writes secrets to dedicated 0600 files', async () => {
 
     assert.equal(await store.get('default', 'clientSecret'), 'client-secret-value');
     assert.equal(await store.get('default', 'refreshToken'), 'refresh-token-value');
-    assert.equal(mode((await stat(secretDir)).mode), '700');
-    assert.equal(mode((await stat(secretFile)).mode), '600');
+    if (process.platform !== 'win32') {
+      assert.equal(mode((await stat(secretDir)).mode), '700');
+      assert.equal(mode((await stat(secretFile)).mode), '600');
+    }
 
     const raw = await readFile(secretFile, 'utf8');
     assert.match(raw, /client-secret-value/);

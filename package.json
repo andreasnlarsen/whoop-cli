@@ -1,12 +1,12 @@
 {
   "name": "@andreasnlarsen/whoop-cli",
-  "version": "0.5.2",
+  "version": "0.5.3",
   "description": "Open-source WHOOP CLI for humans and agents",
   "type": "module",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/andreasnlarsen/whoop-cli"
+    "url": "git+https://github.com/andreasnlarsen/whoop-cli.git"
   },
   "homepage": "https://github.com/andreasnlarsen/whoop-cli#readme",
   "bugs": {

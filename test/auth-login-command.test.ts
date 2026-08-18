@@ -5,7 +5,7 @@ import { promisify } from 'node:util';
 import { existsSync } from 'node:fs';
 import { chmod, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { delimiter, join } from 'node:path';
 
 const execFileAsync = promisify(execFile);
 
@@ -18,15 +18,20 @@ const withFakeOp = async (
   const opLog = join(tmp, 'op.log');
   await mkdir(binDir, { recursive: true });
   await mkdir(home, { recursive: true });
-  const opPath = join(binDir, 'op');
-  await writeFile(opPath, '#!/bin/sh\necho "$@" >> "$OP_LOG"\nexit 1\n', 'utf8');
-  await chmod(opPath, 0o755);
+  const opPath = join(binDir, process.platform === 'win32' ? 'op.cmd' : 'op');
+  if (process.platform === 'win32') {
+    await writeFile(opPath, '@echo off\r\necho %*>>"%OP_LOG%"\r\nexit /b 1\r\n', 'utf8');
+  } else {
+    await writeFile(opPath, '#!/bin/sh\necho "$@" >> "$OP_LOG"\nexit 1\n', 'utf8');
+    await chmod(opPath, 0o755);
+  }
 
   const env: NodeJS.ProcessEnv = {
     ...process.env,
     HOME: home,
+    USERPROFILE: home,
     OP_LOG: opLog,
-    PATH: `${binDir}:${process.env.PATH ?? ''}`,
+    PATH: [binDir, process.env.PATH ?? ''].filter(Boolean).join(delimiter),
   };
   delete env.WHOOP_CLIENT_ID;
   delete env.WHOOP_CLIENT_SECRET;

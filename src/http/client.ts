@@ -60,7 +60,9 @@ export class WhoopApiClient {
       }
 
       if (res.status === 401 && (opts.retryOn401 ?? true)) {
-        const refreshed = await refreshProfileToken(this.profileName);
+        const refreshed = await refreshProfileToken(this.profileName, {
+          failedAccessToken: token,
+        });
         return this.runRequest<T>(refreshed, { ...opts, retryOn401: false });
       }
 

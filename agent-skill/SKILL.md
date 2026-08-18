@@ -9,7 +9,7 @@ metadata:
     homepage: https://github.com/andreasnlarsen/whoop-cli
     install:
       - kind: node
-        package: "@andreasnlarsen/whoop-cli@0.5.2"
+        package: "@andreasnlarsen/whoop-cli@0.5.3"
         bins:
           - whoop
         label: Install whoop-cli from npm
@@ -25,6 +25,7 @@ Use the installed `whoop` command.
 - For first-time auth, have the user run login locally in their own shell.
 - macOS default secret storage is macOS Keychain.
 - Linux/OpenClaw preferred secret storage is 1Password CLI with a service account.
+- Windows secret storage uses explicit 1Password configuration; `auto` storage is limited to macOS and Linux.
 - Linux/OpenClaw simple fallback is explicit `local-vps` storage with `--accept-local-vps-risk`.
 - Profile JSON at `~/.whoop-cli/profiles/<profile>.json` stores non-secret metadata only.
 - Keychain access uses macOS Security APIs through `/usr/bin/swift`; do not replace this with command-line secret arguments.
@@ -42,7 +43,7 @@ Use the installed `whoop` command.
 If `whoop` is missing:
 
 ```bash
-npm install -g @andreasnlarsen/whoop-cli@0.5.2
+npm install -g @andreasnlarsen/whoop-cli@0.5.3
 ```
 
 Install this bundled skill for local Codex/agent use:
@@ -67,16 +68,19 @@ whoop skill install --target path --skill-dir /path/to/skills/whoop-cli --force
 
 ## Core Checks
 
-1. `whoop auth status --json`
-2. If unauthenticated, ask the user to run local login:
+1. Run `whoop auth status --json` and read `authState`.
+2. If `authState` is `login-required`, ask the user to run local login. `refresh-required` does not require login because the next WHOOP API data command refreshes automatically.
    - macOS: `whoop auth login`
    - Linux/OpenClaw recommended: `whoop auth login --secret-storage onepassword --op-vault ... --op-item ...`
+   - Windows: `whoop auth login --secret-storage onepassword --op-vault ... --op-item ...`
    - Telegram-only/simple Linux VPS: `whoop auth login --secret-storage local-vps --accept-local-vps-risk`
    - Prefer the interactive hidden client-secret prompt when a human is present.
    - Use one-time env/secret-manager injection only when automation requires it.
 3. Validate:
    - `whoop summary --json --pretty`
    - `whoop day-brief --json --pretty`
+
+All WHOOP API data commands use one automatic token path. Expiring tokens refresh before the request. One `401` can trigger one coordinated refresh and one retry. Login, refresh, logout, and automatic refresh share a per-profile lock across processes.
 
 ## Useful Commands
 

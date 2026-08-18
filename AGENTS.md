@@ -17,6 +17,7 @@ Agent operating guide for `whoop-cli`.
    - `npm run typecheck`
    - `npm test`
    - `npm run build`
+   - Confirm the Linux, macOS, and Windows CI matrix passes.
 4. Keep docs/examples aligned with current CLI commands.
 
 ## Protected-branch-friendly release checklist (recommended)
@@ -32,9 +33,10 @@ git pull --ff-only
 git switch -c release/vX.Y.Z
 npm version X.Y.Z --no-git-tag-version
 npm install --package-lock-only
+# update both exact X.Y.Z pins in agent-skill/SKILL.md
 npm run typecheck && npm test && npm run build
 
-git add package.json package-lock.json
+git add package.json package-lock.json agent-skill/SKILL.md
 git commit -m "chore(release): vX.Y.Z"
 git push -u origin release/vX.Y.Z
 ```
@@ -48,8 +50,7 @@ git push -u origin release/vX.Y.Z
 
 ```bash
 git switch main
-git fetch origin
-git reset --hard origin/main
+git pull --ff-only origin main
 
 git tag vX.Y.Z
 git push origin vX.Y.Z
@@ -67,15 +68,13 @@ Expected: latest is `X.Y.Z`.
 
 ### E) Publish agent skill update (keep installer aligned with npm release)
 
-After npm `X.Y.Z` is live, update and publish the bundled skill so agent installs resolve to that exact package version.
+Update the bundled skill in the release PR so agent installs resolve to the same exact package version.
 
 1) Update `agent-skill/SKILL.md`:
 - `metadata.openclaw.install[].package` -> `@andreasnlarsen/whoop-cli@X.Y.Z`
 - install snippet -> `npm install -g @andreasnlarsen/whoop-cli@X.Y.Z`
 
-2) Merge that change via PR (same protected-branch rule: no direct push to `main`).
-
-3) Publish to ClawHub with a new skill version:
+2) After npm `X.Y.Z` is live, publish the already-merged skill to ClawHub with a new skill version:
 
 ```bash
 npx -y clawhub publish ./agent-skill \
@@ -86,7 +85,7 @@ npx -y clawhub publish ./agent-skill \
   --tags latest
 ```
 
-4) Verify by installing to a temp workdir and checking installed `SKILL.md` references `@andreasnlarsen/whoop-cli@X.Y.Z`.
+3) Verify by installing to a temp workdir and checking installed `SKILL.md` references `@andreasnlarsen/whoop-cli@X.Y.Z`.
 
 ## Trusted publishing notes
 
@@ -106,7 +105,7 @@ Trusted publishing with provenance will fail if `package.json` metadata is missi
 
 `package.json` must include and keep accurate:
 
-- `repository.url` -> `https://github.com/andreasnlarsen/whoop-cli`
+- `repository.url` -> `git+https://github.com/andreasnlarsen/whoop-cli.git`
 - `homepage`
 - `bugs.url`
 
