@@ -1,5 +1,5 @@
 import { randomBytes } from 'node:crypto';
-import { authError, networkError, usageError } from '../http/errors.js';
+import { authError, networkError, usageError, WhoopCliError } from '../http/errors.js';
 
 export interface OAuthClientConfig {
   clientId: string;
@@ -41,7 +41,11 @@ const exchange = async (
   const body = new URLSearchParams(payload);
 
   let res: Response;
+  let raw: string;
   try {
+    // Authorization codes and refresh tokens are single-use credentials. The
+    // server can consume one after the POST is sent but before the response is
+    // received. Aborting here could discard the only usable token response.
     res = await fetch(tokenEndpoint(config.baseUrl), {
       method: 'POST',
       headers: {
@@ -49,13 +53,12 @@ const exchange = async (
       },
       body: body.toString(),
     });
+    raw = await res.text();
   } catch (err) {
     throw networkError('Failed to reach WHOOP token endpoint', {
       cause: err instanceof Error ? err.message : String(err),
     });
   }
-
-  const raw = await res.text();
   let parsed: unknown = raw;
   try {
     parsed = JSON.parse(raw);
@@ -100,13 +103,31 @@ export const refreshAuthToken = async (
 
   // WHOOP docs (OAuth refresh flow) require scope=offline in refresh requests.
   // Using token-issued scope strings here can produce malformed refresh requests.
-  return exchange(config, {
-    grant_type: 'refresh_token',
-    refresh_token: refreshToken,
-    client_id: config.clientId,
-    client_secret: config.clientSecret,
-    scope: 'offline',
-  });
+  try {
+    return await exchange(config, {
+      grant_type: 'refresh_token',
+      refresh_token: refreshToken,
+      client_id: config.clientId,
+      client_secret: config.clientSecret,
+      scope: 'offline',
+    });
+  } catch (err) {
+    if (err instanceof WhoopCliError && err.code === 'AUTH_ERROR') {
+      const details = err.details as {
+        status?: number;
+        response?: { error?: string; error_description?: string };
+      } | undefined;
+      const providerCode = details?.response?.error;
+      if (providerCode === 'invalid_grant' || providerCode === 'invalid_request') {
+        throw authError('WHOOP rejected the stored refresh token. Run whoop auth login again.', {
+          ...details,
+          reauthRequired: true,
+        });
+      }
+    }
+
+    throw err;
+  }
 };
 
 export interface ParsedAuthInput {

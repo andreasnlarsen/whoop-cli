@@ -99,6 +99,13 @@ export const preflightProfileSecretStorage = async (
   await store.preflightWrite?.(profileName);
 };
 
+export const preflightProfileSecretStorageForProfile = async (
+  profile: WhoopProfile,
+): Promise<void> => {
+  const profileName = sanitizeProfileName(profile.profileName);
+  await storeForProfile(profile).preflightWrite?.(profileName);
+};
+
 const storeForStoredProfile = (stored: StoredWhoopProfile): ProfileSecretStore =>
   profileSecretStoresForTesting?.[stored.secretStorage]
   ?? profileSecretStoreForTesting
@@ -151,21 +158,14 @@ const deleteProfileSecrets = async (
   await deleteProfileTokenSecrets(store, profileName);
 };
 
-const loadProfileTokenSecrets = async (store: ProfileSecretStore, profileName: string): Promise<{
-  accessToken: string | undefined;
-  refreshToken: string | undefined;
-}> => ({
-  accessToken: await store.get(profileName, 'accessToken'),
-  refreshToken: await store.get(profileName, 'refreshToken'),
-});
-
 const loadProfileSecrets = async (store: ProfileSecretStore, profileName: string): Promise<{
   clientSecret: string | undefined;
   accessToken: string | undefined;
   refreshToken: string | undefined;
 }> => ({
   clientSecret: await store.get(profileName, 'clientSecret'),
-  ...(await loadProfileTokenSecrets(store, profileName)),
+  accessToken: await store.get(profileName, 'accessToken'),
+  refreshToken: await store.get(profileName, 'refreshToken'),
 });
 
 const restoreProfileSecret = async (
@@ -178,27 +178,6 @@ const restoreProfileSecret = async (
     await store.set(profileName, name, value);
   } else {
     await store.delete(profileName, name);
-  }
-};
-
-const restoreProfileTokenSecrets = async (
-  store: ProfileSecretStore,
-  profileName: string,
-  tokens: {
-    accessToken: string | undefined;
-    refreshToken: string | undefined;
-  },
-): Promise<void> => {
-  if (tokens.accessToken) {
-    await store.set(profileName, 'accessToken', tokens.accessToken);
-  } else {
-    await store.delete(profileName, 'accessToken');
-  }
-
-  if (tokens.refreshToken) {
-    await store.set(profileName, 'refreshToken', tokens.refreshToken);
-  } else {
-    await store.delete(profileName, 'refreshToken');
   }
 };
 
@@ -424,7 +403,15 @@ export const loadProfile = async (name: string): Promise<WhoopProfile | null> =>
   };
 };
 
-export const saveProfile = async (name: string, profile: WhoopProfile): Promise<void> => {
+export interface SaveProfileOptions {
+  tokenRotationCommitted?: boolean;
+}
+
+export const saveProfile = async (
+  name: string,
+  profile: WhoopProfile,
+  options: SaveProfileOptions = {},
+): Promise<void> => {
   const profileName = sanitizeProfileName(name);
   const store = storeForProfile(profile);
   const previousStored = await loadProfileMetadata(profileName);
@@ -436,20 +423,34 @@ export const saveProfile = async (name: string, profile: WhoopProfile): Promise<
   const previousTargetSecrets = await loadProfileSecrets(store, profileName);
   let wroteClientSecret = false;
   let wroteTokenSecrets = false;
+  let wroteCommittedRefreshToken = false;
+
   try {
+    if (options.tokenRotationCommitted && profile.tokens?.refreshToken) {
+      // The provider has already revoked the old refresh token. Persist its
+      // replacement before any other write that could fail.
+      await store.set(profileName, 'refreshToken', profile.tokens.refreshToken);
+      wroteTokenSecrets = true;
+      wroteCommittedRefreshToken = true;
+    }
+
     if (profile.clientSecret) {
       await store.set(profileName, 'clientSecret', profile.clientSecret);
       wroteClientSecret = true;
     }
 
     if (profile.tokens?.accessToken) {
-      await store.set(profileName, 'accessToken', profile.tokens.accessToken);
-      wroteTokenSecrets = true;
-      if (profile.tokens.refreshToken) {
-        await store.set(profileName, 'refreshToken', profile.tokens.refreshToken);
-      } else {
-        await store.delete(profileName, 'refreshToken');
+      // WHOOP rotates refresh tokens. Persist the new refresh token before the
+      // access token so a partial write keeps the usable credential.
+      if (!wroteCommittedRefreshToken) {
+        if (profile.tokens.refreshToken) {
+          await store.set(profileName, 'refreshToken', profile.tokens.refreshToken);
+        } else {
+          await store.delete(profileName, 'refreshToken');
+        }
+        wroteTokenSecrets = true;
       }
+      await store.set(profileName, 'accessToken', profile.tokens.accessToken);
     } else {
       await deleteProfileTokenSecrets(store, profileName);
       wroteTokenSecrets = true;
@@ -457,16 +458,30 @@ export const saveProfile = async (name: string, profile: WhoopProfile): Promise<
 
     await writeJsonFileSecure(profilePath(profileName), profileForStorage(profileName, profile));
   } catch (err) {
-    const restorations: Array<Promise<void>> = [];
     if (wroteClientSecret) {
-      restorations.push(restoreProfileSecret(store, profileName, 'clientSecret', previousTargetSecrets.clientSecret));
+      await restoreProfileSecret(
+        store,
+        profileName,
+        'clientSecret',
+        previousTargetSecrets.clientSecret,
+      ).catch(() => undefined);
     }
-    if (wroteTokenSecrets) {
-      restorations.push(restoreProfileTokenSecrets(store, profileName, previousTargetSecrets));
+
+    if (wroteTokenSecrets && !options.tokenRotationCommitted) {
+      await restoreProfileSecret(
+        store,
+        profileName,
+        'refreshToken',
+        previousTargetSecrets.refreshToken,
+      ).catch(() => undefined);
+      await restoreProfileSecret(
+        store,
+        profileName,
+        'accessToken',
+        previousTargetSecrets.accessToken,
+      ).catch(() => undefined);
     }
-    if (restorations.length) {
-      await Promise.allSettled(restorations);
-    }
+
     throw err;
   }
 

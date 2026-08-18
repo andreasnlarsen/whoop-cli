@@ -41,6 +41,9 @@ export const profilePath = (profile: string): string =>
 export const localVpsSecretPath = (profile: string): string =>
   join(whoopHome(), 'secrets', `${sanitizeProfileName(profile)}.json`);
 
+export const profileAuthLockPath = (profile: string): string =>
+  join(whoopHome(), 'locks', `${sanitizeProfileName(profile)}.auth.lock`);
+
 export const experimentsPath = (): string => join(whoopHome(), 'experiments.json');
 
 export const behaviorLogPath = (): string => join(whoopHome(), 'journal-observations.jsonl');

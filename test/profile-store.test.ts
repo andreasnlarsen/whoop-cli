@@ -75,6 +75,28 @@ class DeleteThrowingProfileSecretStore extends MemoryProfileSecretStore {
   }
 }
 
+class AccessTokenWriteFailStore extends MemoryProfileSecretStore {
+  failAccessTokenWrites = false;
+
+  override async set(profileName: string, name: ProfileSecretName, value: string): Promise<void> {
+    if (this.failAccessTokenWrites && name === 'accessToken') {
+      throw new Error('access token write failed');
+    }
+    await super.set(profileName, name, value);
+  }
+}
+
+class ClientSecretWriteFailStore extends MemoryProfileSecretStore {
+  failClientSecretWrites = false;
+
+  override async set(profileName: string, name: ProfileSecretName, value: string): Promise<void> {
+    if (this.failClientSecretWrites && name === 'clientSecret') {
+      throw new Error('client secret write failed');
+    }
+    await super.set(profileName, name, value);
+  }
+}
+
 const sampleToken = (): TokenSet => ({
   accessToken: 'access-token-value',
   refreshToken: 'refresh-token-value',
@@ -98,8 +120,10 @@ const sampleProfile = (): WhoopProfile => ({
 
 const withTempHome = async (fn: (home: string) => Promise<void>): Promise<void> => {
   const originalHome = process.env.HOME;
+  const originalUserProfile = process.env.USERPROFILE;
   const home = await mkdtemp(join(tmpdir(), 'whoop-cli-profile-store-'));
   process.env.HOME = home;
+  process.env.USERPROFILE = home;
 
   try {
     await fn(home);
@@ -109,6 +133,11 @@ const withTempHome = async (fn: (home: string) => Promise<void>): Promise<void> 
       delete process.env.HOME;
     } else {
       process.env.HOME = originalHome;
+    }
+    if (originalUserProfile === undefined) {
+      delete process.env.USERPROFILE;
+    } else {
+      process.env.USERPROFILE = originalUserProfile;
     }
     await rm(home, { recursive: true, force: true });
   }
@@ -358,7 +387,7 @@ test('clearProfileTokens deletes deterministic token accounts without profile me
   });
 });
 
-test('saveProfile rolls back new secrets if metadata write fails', async () => {
+test('saveProfile does not write secrets when profile metadata cannot be read', async () => {
   await withTempHome(async (home) => {
     const secrets = new MemoryProfileSecretStore();
     setProfileSecretStoreForTesting(secrets);
@@ -373,7 +402,7 @@ test('saveProfile rolls back new secrets if metadata write fails', async () => {
   });
 });
 
-test('saveProfile restores previous secrets if metadata write fails', async () => {
+test('saveProfile preserves existing secrets when profile metadata cannot be read', async () => {
   await withTempHome(async (home) => {
     const secrets = new MemoryProfileSecretStore();
     setProfileSecretStoreForTesting(secrets);
@@ -395,6 +424,85 @@ test('saveProfile restores previous secrets if metadata write fails', async () =
     assert.equal(await secrets.get('default', 'clientSecret'), 'old-client-secret');
     assert.equal(await secrets.get('default', 'accessToken'), 'old-access-token');
     assert.equal(await secrets.get('default', 'refreshToken'), 'old-refresh-token');
+  });
+});
+
+test('saveProfile restores login secrets when a later token write fails', async () => {
+  await withTempHome(async () => {
+    const secrets = new AccessTokenWriteFailStore();
+    setProfileSecretStoreForTesting(secrets);
+    await saveProfile('default', sampleProfile());
+    secrets.failAccessTokenWrites = true;
+
+    await assert.rejects(
+      () => saveProfile('default', {
+        ...sampleProfile(),
+        clientId: 'new-client-id',
+        clientSecret: 'new-client-secret',
+        tokens: {
+          ...sampleToken(),
+          accessToken: 'new-access-token',
+          refreshToken: 'new-refresh-token',
+        },
+      }),
+      /access token write failed/,
+    );
+
+    assert.equal(await secrets.get('default', 'accessToken'), 'access-token-value');
+    assert.equal(await secrets.get('default', 'refreshToken'), 'refresh-token-value');
+    assert.equal(await secrets.get('default', 'clientSecret'), 'client-secret-value');
+  });
+});
+
+test('saveProfile keeps a committed rotated refresh token when a later token write fails', async () => {
+  await withTempHome(async () => {
+    const secrets = new AccessTokenWriteFailStore();
+    setProfileSecretStoreForTesting(secrets);
+    await saveProfile('default', sampleProfile());
+    secrets.failAccessTokenWrites = true;
+
+    await assert.rejects(
+      () => saveProfile('default', {
+        ...sampleProfile(),
+        clientSecret: 'unchanged-during-refresh',
+        tokens: {
+          ...sampleToken(),
+          accessToken: 'new-access-token',
+          refreshToken: 'new-refresh-token',
+        },
+      }, { tokenRotationCommitted: true }),
+      /access token write failed/,
+    );
+
+    assert.equal(await secrets.get('default', 'accessToken'), 'access-token-value');
+    assert.equal(await secrets.get('default', 'refreshToken'), 'new-refresh-token');
+    assert.equal(await secrets.get('default', 'clientSecret'), 'client-secret-value');
+  });
+});
+
+test('saveProfile writes a committed rotated refresh token before the client secret', async () => {
+  await withTempHome(async () => {
+    const secrets = new ClientSecretWriteFailStore();
+    setProfileSecretStoreForTesting(secrets);
+    await saveProfile('default', sampleProfile());
+    secrets.failClientSecretWrites = true;
+
+    await assert.rejects(
+      () => saveProfile('default', {
+        ...sampleProfile(),
+        clientSecret: 'unchanged-during-refresh',
+        tokens: {
+          ...sampleToken(),
+          accessToken: 'new-access-token',
+          refreshToken: 'new-refresh-token',
+        },
+      }, { tokenRotationCommitted: true }),
+      /client secret write failed/,
+    );
+
+    assert.equal(await secrets.get('default', 'accessToken'), 'access-token-value');
+    assert.equal(await secrets.get('default', 'refreshToken'), 'new-refresh-token');
+    assert.equal(await secrets.get('default', 'clientSecret'), 'client-secret-value');
   });
 });
 

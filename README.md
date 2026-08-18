@@ -24,9 +24,17 @@ There is **no managed/shared auth service** in this repo right now.
 Secrets are local-only:
 - macOS defaults to Keychain for the WHOOP client secret, access token, and refresh token.
 - Linux/OpenClaw should use 1Password service-account storage for recurring unattended use.
+- Windows can use explicit 1Password storage with `--secret-storage onepassword`; `auto` storage is limited to macOS and Linux.
 - Linux VPS setups can explicitly opt into `local-vps` storage for a Telegram-only/simple setup.
 - `~/.whoop-cli/profiles/<name>.json` stores non-secret profile metadata only.
 - After login, regular reads and refreshes should not need passwords or Touch ID prompts.
+
+Authentication is automatic after login:
+- Every WHOOP API data command refreshes an expiring access token before its request.
+- A `401` response gets one coordinated refresh and one retry.
+- Login, refresh, logout, and automatic refresh share one per-profile lock across processes on macOS, Linux, and Windows.
+- WHOOP rotates refresh tokens. The replacement is stored before other token state so the revoked token is not restored after a partial write.
+- If WHOOP rejects the stored refresh token, the CLI gives the explicit action: run `whoop auth login` again.
 
 ## Important legal / brand notice
 
@@ -44,7 +52,7 @@ Secrets are local-only:
 - Package: `@andreasnlarsen/whoop-cli`
 - Releases are published via GitHub Actions trusted publishing (OIDC) with npm provenance.
 - This integration is unofficial and not affiliated with Whoop, Inc.
-- Never paste long-lived OAuth client secrets/tokens into chat. Use Keychain on macOS, 1Password on Linux/OpenClaw, or explicitly acknowledged `local-vps` storage for simple locked-down VPS setups.
+- Never paste long-lived OAuth client secrets/tokens into chat. Use Keychain on macOS, 1Password on Linux/OpenClaw or Windows, or explicitly acknowledged `local-vps` storage for simple locked-down Linux VPS setups.
 - Verify install quickly:
   - `npx -y @andreasnlarsen/whoop-cli --help`
   - `whoop auth status --json`
@@ -162,8 +170,10 @@ Secret storage is selected with `--secret-storage`:
 
 - `auto` (default): macOS uses Keychain. Linux preserves an existing supported backend; explicit `--op-vault` and `--op-item` retarget to 1Password, and `WHOOP_OP_VAULT`/`WHOOP_OP_ITEM` configure 1Password when no supported backend is already stored. Without those choices, Linux auto fails with setup guidance.
 - `macos-keychain`: stores the client secret and OAuth tokens in macOS Keychain under the `whoop-cli` service. Keychain access uses macOS Security APIs through `/usr/bin/swift` so secret values are passed over stdin instead of command-line arguments.
-- `onepassword`: stores rotating WHOOP secrets in a 1Password item using the `op` CLI. Use this for Linux/OpenClaw VPSes with a 1Password service account.
+- `onepassword`: stores rotating WHOOP secrets in a 1Password item using the `op` CLI. Use this for Linux/OpenClaw VPSes with a service account or for explicit Windows storage.
 - `local-vps`: explicit Linux VPS fallback that stores secrets in `~/.whoop-cli/secrets/<profile>.json` with `0600` permissions. It requires `--accept-local-vps-risk` and protects against accidental repo/chat/log exposure, not VPS compromise.
+
+On Windows, select `onepassword` explicitly and provide `--op-vault` plus `--op-item`. Windows `auto` storage is not supported.
 
 Example Linux/OpenClaw 1Password setup:
 
@@ -194,6 +204,8 @@ Then test:
 whoop auth status --json --pretty
 whoop day-brief --json --pretty
 ```
+
+`whoop auth status --json` reports `authState` as `active`, `refresh-required`, or `login-required`. An expired access token with a stored refresh token remains authenticated because the next WHOOP API data command refreshes it automatically.
 
 ---
 
@@ -255,15 +267,16 @@ whoop day-brief --json --pretty
 
 ## For agents/installers (recommended setup flow)
 
-1. Verify auth:
+1. Verify auth and read `authState`:
 
 ```bash
 whoop auth status --json
 ```
 
-2. If not authenticated, help the user run `whoop auth login` with the right storage mode:
+2. If `authState` is `login-required`, help the user run `whoop auth login` with the right storage mode. `refresh-required` does not require login.
    - macOS: default `auto`/Keychain.
    - Linux/OpenClaw recurring use: `--secret-storage onepassword --op-vault ... --op-item ...`.
+   - Windows: `--secret-storage onepassword --op-vault ... --op-item ...`.
    - Telegram-only simple VPS: `--secret-storage local-vps --accept-local-vps-risk`.
 3. Do not send long-lived 1Password service-account tokens through Telegram. For simple `local-vps` setup, the expected Telegram handoff is the short-lived WHOOP OAuth auth URL and redirected callback URL.
 4. Validate with:
@@ -273,7 +286,7 @@ whoop profile show --json
 whoop day-brief --json
 ```
 
-5. For unattended systems, schedule:
+5. Optional: use the monitor as an explicit health check. Normal WHOOP API data commands already refresh automatically.
 
 ```bash
 scripts/whoop-refresh-monitor.sh
@@ -322,7 +335,7 @@ whoop activity list --days 30 --json | jq '.data.records | map(select(.sport_id 
 
 ### Ops
 - `whoop sync pull --start YYYY-MM-DD --end YYYY-MM-DD --out ./whoop.jsonl`
-- `whoop webhook verify --secret ... --timestamp ... --signature ... --body-file ...`
+- `whoop --profile default webhook verify --timestamp ... --signature ... --body-file ...`
 - `whoop activity map-v1-id --id <legacyV1ActivityId>`
 - `whoop skill install --target agents --force`
 - `whoop skill install --target openclaw --force`
@@ -388,7 +401,9 @@ Exit codes:
 - 1Password service-account storage is the preferred Linux/OpenClaw VPS backend
 - `local-vps` is an explicit Linux fallback with `0700` secret directory and `0600` secret files
 - `~/.whoop-cli/profiles/<name>.json` stores non-secret metadata with strict file permissions
-- Refresh-token flow supported for automation
+- WHOOP API data commands refresh expiring tokens automatically and retry one `401` after coordinated refresh
+- Per-profile authentication locks coordinate login, refresh, and logout across processes on macOS, Linux, and Windows
+- Rotated refresh tokens are persisted before other token state
 - CLI avoids printing secrets by default
 - JSON error details redact fields that look like secrets, tokens, authorization headers, or cookies
 
@@ -422,9 +437,10 @@ git pull --ff-only
 git switch -c release/vX.Y.Z
 npm version X.Y.Z --no-git-tag-version
 npm install --package-lock-only
+# update both exact X.Y.Z pins in agent-skill/SKILL.md
 npm run typecheck && npm test && npm run build
 
-git add package.json package-lock.json
+git add package.json package-lock.json agent-skill/SKILL.md
 git commit -m "chore(release): vX.Y.Z"
 git push -u origin release/vX.Y.Z
 
@@ -432,8 +448,7 @@ git push -u origin release/vX.Y.Z
 
 # 3) tag from merged main commit
 git switch main
-git fetch origin
-git reset --hard origin/main
+git pull --ff-only origin main
 git tag vX.Y.Z
 git push origin vX.Y.Z
 ```

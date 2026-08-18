@@ -1,6 +1,12 @@
 import { refreshAuthToken, type OAuthClientConfig } from './oauth.js';
-import { withRefreshLock } from './refresh-lock.js';
-import { loadProfile, saveProfile, type TokenSet, type WhoopProfile } from '../store/profile-store.js';
+import { withProfileAuthLock } from './refresh-lock.js';
+import {
+  loadProfile,
+  preflightProfileSecretStorageForProfile,
+  saveProfile,
+  type TokenSet,
+  type WhoopProfile,
+} from '../store/profile-store.js';
 import { authError, configError } from '../http/errors.js';
 import { tokenRefreshSkewSeconds } from '../util/config.js';
 
@@ -53,17 +59,35 @@ const toOAuthConfig = (profile: WhoopProfile): OAuthClientConfig => ({
   baseUrl: profile.baseUrl,
 });
 
-export const refreshProfileToken = async (profileName: string): Promise<WhoopProfile> =>
-  withRefreshLock(profileName, async () => {
+export interface RefreshProfileTokenOptions {
+  force?: boolean;
+  failedAccessToken?: string;
+}
+
+export const refreshProfileToken = async (
+  profileName: string,
+  options: RefreshProfileTokenOptions = {},
+): Promise<WhoopProfile> =>
+  withProfileAuthLock(profileName, async () => {
     const profile = await requireProfile(profileName);
-    const refreshToken = profile.tokens?.refreshToken;
+    const token = profile.tokens;
+    if (options.failedAccessToken && token?.accessToken !== options.failedAccessToken) {
+      return profile;
+    }
+
+    if (!(options.force ?? true) && token && !isTokenExpired(token)) {
+      return profile;
+    }
+
+    const refreshToken = token?.refreshToken;
     if (!refreshToken) {
       throw authError('No refresh token available. Re-run whoop auth login with offline scope.');
     }
 
+    await preflightProfileSecretStorageForProfile(profile);
     const refreshed = await refreshAuthToken(toOAuthConfig(profile), refreshToken);
     profile.tokens = tokenFromOAuth(refreshed, refreshToken);
-    await saveProfile(profileName, profile);
+    await saveProfile(profileName, profile, { tokenRotationCommitted: true });
     return profile;
   });
 
@@ -78,5 +102,5 @@ export const ensureFreshToken = async (profileName: string): Promise<WhoopProfil
     return profile;
   }
 
-  return refreshProfileToken(profileName);
+  return refreshProfileToken(profileName, { force: false });
 };
