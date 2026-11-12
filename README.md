@@ -1,3 +1,5 @@
+<img src="https://raw.githubusercontent.com/andreasnlarsen/whoop-cli/main/assets/logo.png" alt="" width="96" height="96">
+
 # whoop-cli
 
 Simple WHOOP command-line tool for humans and agents.
